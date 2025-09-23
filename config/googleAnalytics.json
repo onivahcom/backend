@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "kinetic-pilot-436306-m0",
+  "private_key_id": "903f8427bc48dc4465384b533d31b7fa8ebbf293",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCjYMCs27Jw1gyl\n32n4mMQcwyFBWN3w26BR2slC+ZbhesZDgeVb1VW4BtAtAcVyKVTfJ8pymcyh3jVP\nSy7MEjN/hRyQUYUB2+ms8JpQOfYyz/TPfBTG1jUkSSCKrQDTMMxuvK1YcPtY70iQ\nTNxOLJz6ZpVeKT6rPe2CYH2xKaBOOSi4RjRt1OubrKQpyBkq1ts38fyi0B9TUn1w\n94Q9rfb4JMZThrDASKGAQeIpp745YryKz9i1taR1Wf3NF28l1pGsrIYZ4lH8sxnx\nYMYb/4WJ4tMkl0+cRTtSKuZZvSm+Gj5k517B2Iwrb/WtcUr5gMENFz+dnIADBO0M\nyhVeAeT5AgMBAAECggEAB3eGTtAqr2AFC3ayxe8bdXIQnMc2O4oaIWuVq7czB2Kg\nWZj/9crCBGthS9FLKBzN+XX82XCAivxYJOPbg22oh2E6zTjAkrVtkF8dumFvyGI7\nPtldrLnBC4PBFj1ybnSKP1xlssdVIXssLpYosnT1Bre2B2vsppBpwL3uuLBdmH2P\nCHmkXx9pat1NH7UdXdRIsQjgrT7hjnG5J5GLKOXcbpl49r7McSo8Awa8dvYKtUfV\nmdj3yR8y2noYJaJi3BMZUoeh5968BFeQEA3ugm38NwbtKXb6+EtmRVZtqkDauAAV\nTmyYKbU5p5G9HVfr166E24wlg0GNFk4Tbaxznu46wQKBgQDcxOA8YxES86jln2Bo\nV3C/o4xltqMxZ/AhPuAXsE6iNLu2DA9vwWy6Zw1qKN8Coo4tnHhNYVCOxxnhSkmA\n3HH4xJzRMCrSMK73SJsTkaK4C7XqEeF0X/RVvkrntaaBktvN4Vm/4hjjIJsrZAtT\ns7XMCbz75XJqA8eIBB0Mq8f4oQKBgQC9c0QNC3In/YdYfYWIydsysW3MPpVuhaGZ\nN3r/Mzj4YAS9RT4aIbyKv6fESdEHttWt9kNnrnrsjiPad4UMRKcqMTR8LtPc84Rp\nHj/ZGUQ9TmLpFRdht+ozWu+SNVy44/Vm1XvADYFdjF46vC39ShP8l79IiQtaG0J1\nySldno9VWQKBgC6sFHfPvclS5877nacRbU2mZsUOEnwcbCCrKTb41/bkzRZUgGLw\n8mqJ5MUftN3avdIYtTouq5gzsV32lYl/kTy1XC3BUBw1nJe8qsQ9Urg0CZZdh1tR\n+dayryVDOttDz+I7lPzC8N37g7JtqRNd974WBPT/8etFt0YjEH0gR9thAoGBAIss\nr3Rp0S4hqRlP9RZdPAOMpt2hqENuNh4JzPjHl3WXjEPDJ3EpEYpYa5XeqInjPiyz\nOidj3XgEn8Axh3NQyAFN7oHAIPIzjzVt/HevgRsMh8s1LF0kMBAUIOUnAHvvM2ud\nL3ESOtQPd3Xsolht4CrzC5ns24MRfYxsAFB/WErZAoGASBjbSVUbXKyDvoEHrH14\nE3RMPNFdEN8bu2tC41AZe0VS44ef86rJxGRT7vJQbocSx4e6ilaIWwBQng7tZnug\n0HwagTQQNPM3EDWL1Ay7vkL84s/PmCFz8D76wKc80yfaxFDLVzZBETYR6sLoRF/D\nVmP68NWfOTmN9jBjQzKW0/Q=\n-----END PRIVATE KEY-----\n",
+  "client_email": "ga4-analytics-access@kinetic-pilot-436306-m0.iam.gserviceaccount.com",
+  "client_id": "107250743632310431041",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ga4-analytics-access%40kinetic-pilot-436306-m0.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
