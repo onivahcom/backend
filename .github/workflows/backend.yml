@@ -1,0 +1,25 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy Backend
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_PRIVATE_KEY }}
+        script: |
+          cd /var/www/backend
+          git pull origin main
+          npm ci --legacy-peer-deps
+          pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
+          pm2 restart backend
+          pm2 save
