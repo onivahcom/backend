@@ -382,7 +382,7 @@ const authenticateToken = async (req, res, next) => {
 
 // inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully");
+  res.status(200).send("Backend connected successfully...");
 });
 
 // admin login verification
