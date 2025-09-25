@@ -115,16 +115,13 @@ io.on('connection', (socket) => {
 app.set('trust proxy', 1);
 
 const allowedOrigins = [
+  'https://onivah.com',       // add both www and non-www if needed
   'https://www.onivah.com',
   'https://backend.onivah.com',
   'https://algos.onivah.com',
-  // "http://localhost:3000",        // Dev
-  // "http://localhost:3001",        // Dev
-  // "http://localhost:4000",        // Dev
 ];
 
 const pythonapi = 'https://algos.onivah.com';
-// const pythonapi = 'https://fphnc2kj-8000.inc1.devtunnels.ms';
 
 const corsOptions = {
   origin: function (origin, callback) {
