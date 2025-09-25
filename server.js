@@ -119,6 +119,7 @@ const allowedOrigins = [
   'https://www.onivah.com',
   'https://backend.onivah.com',
   'https://algos.onivah.com',
+  'http://localhost:3000',
 ];
 
 const pythonapi = 'https://algos.onivah.com';
