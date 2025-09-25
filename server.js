@@ -122,7 +122,7 @@ const allowedOrigins = [
   "http://localhost:4000",        // Dev
 ];
 
-const pythonapi = 'http://127.0.0.1:8000';
+const pythonapi = 'https://algos.onivah.com';
 // const pythonapi = 'https://fphnc2kj-8000.inc1.devtunnels.ms';
 
 const corsOptions = {
@@ -1833,7 +1833,7 @@ app.get("/recommend/:serviceId", async (req, res) => {
     ).lean();
 
     // 3. Send cleaned data (lean() ensures plain JS object, not Mongoose doc)
-    const response = await axios.post("http://127.0.0.1:8000/recommend", {
+    const response = await axios.post("https://algos.onivah.com/recommend", {
       baseService,
       candidates: allServices,
     });
