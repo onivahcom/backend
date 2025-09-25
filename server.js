@@ -312,7 +312,7 @@ const authToken = '';
 
 const whatsappNumber = "+1455238886"; //14155238886  //sms -14067977741 Twilio WhatsApp sandbox number
 
-const client = twilio(accountSid, authToken);
+// const client = twilio(accountSid, authToken);
 
 
 const OPENROUTER_API_KEY = "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";
@@ -629,13 +629,13 @@ function generateOnivahId() {
 async function sendSMS(phone, otp) {
   console.log(phone, otp);
   try {
-    const message = await client.messages.create({
-      from: "whatsapp:+14155238886", // Twilio WhatsApp sandbox number
-      to: `whatsapp:${phone}`, // Example: whatsapp:+919543445782
-      body: `🔑 Your OTP is: ${otp}. Please use this to verify your account.`,
-    });
+    // const message = await client.messages.create({
+    //   from: "whatsapp:+14155238886", // Twilio WhatsApp sandbox number
+    //   to: `whatsapp:${phone}`, // Example: whatsapp:+919543445782
+    //   body: `🔑 Your OTP is: ${otp}. Please use this to verify your account.`,
+    // });
 
-    console.log(`✅ OTP sent to phone: ${phone}, SID: ${message.sid}`);
+    // console.log(`✅ OTP sent to phone: ${phone}, SID: ${message.sid}`);
     return { success: true, message: `OTP sent to phone: ${phone}` };
   } catch (error) {
     console.log("❌ Error sending WhatsApp OTP:", error);
