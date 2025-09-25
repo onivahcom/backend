@@ -115,11 +115,12 @@ io.on('connection', (socket) => {
 app.set('trust proxy', 1);
 
 const allowedOrigins = [
-  // "https://fphnc2kj-3000.inc1.devtunnels.ms",
-  // "https://fphnc2kj-8000.inc1.devtunnels.ms",
-  "http://localhost:3000",        // Dev
-  "http://localhost:3001",        // Dev
-  "http://localhost:4000",        // Dev
+  'https://www.onivah.com',
+  'https://backend.onivah.com',
+  'https://algos.onivah.com',
+  // "http://localhost:3000",        // Dev
+  // "http://localhost:3001",        // Dev
+  // "http://localhost:4000",        // Dev
 ];
 
 const pythonapi = 'https://algos.onivah.com';
