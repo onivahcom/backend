@@ -46,7 +46,7 @@ jobs:
           script: |
             mkdir -p /var/www/backend
             cd /var/www/backend
- 
+
             # Clone repo if missing
             if [ ! -d ".git" ]; then
               git clone git@github.com:onivahcom/backend.git .
@@ -59,11 +59,7 @@ jobs:
             # Install dependencies
             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-            # Restart / Start backend
-            if pm2 describe backend > /dev/null; then
-              pm2 restart backend
-            else
-              pm2 start npm --name backend -- run start
-            fi
-
+            # Restart backend safely
+            pm2 delete backend || true
+            pm2 start npm --name backend -- run start
             pm2 save
