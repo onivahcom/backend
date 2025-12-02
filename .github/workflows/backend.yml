@@ -1,3 +1,30 @@
+# name: Backend CI/CD
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#     - name: Deploy Backend
+#       uses: appleboy/ssh-action@v0.1.7
+#       with:
+#         host: ${{ secrets.VPS_HOST }}
+#         username: ${{ secrets.VPS_USER }}
+#         key: ${{ secrets.VPS_PRIVATE_KEY }}
+#         script: |
+#           cd /var/www/backend
+#           git pull origin main
+#           npm ci --legacy-peer-deps
+#           pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
+#           pm2 restart backend
+#           pm2 save
+
+
 name: Backend CI/CD
 
 on:
@@ -10,40 +37,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Deploy Backend
-      uses: appleboy/ssh-action@v0.1.7
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        key: ${{ secrets.VPS_PRIVATE_KEY }}
-        # script: |
-        #   cd /var/www/backend
-        #   git pull origin main
-        #   npm ci --legacy-peer-deps
-        #   pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
-        #   pm2 restart backend
-        #   pm2 save
-         script: |
-      cd /var/www/backend
+      - name: Deploy Backend
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_PRIVATE_KEY }}
+          script: |
+            cd /var/www/backend
 
-      # Clone repo if folder has no git (first deployment)
-      if [ ! -d ".git" ]; then
-        git clone https://github.com/onivahcom/backend.git .
-      fi
+            # Clone repo if folder has no git (first deployment)
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/onivahcom/backend.git .
+            fi
 
-      # Sync with latest main branch
-      git fetch origin main
-      git reset --hard origin/main
+            # Sync with latest main branch
+            git fetch origin main
+            git reset --hard origin/main
 
-      # Install dependencies
-      npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+            # Install dependencies
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-      # Start backend if not running, else restart
-      pm2 describe backend > /dev/null 2>&1
-      if [ $? -eq 0 ]; then
-        pm2 restart backend
-      else
-        pm2 start npm --name backend -- start
-      fi
+            # Start backend if not running, else restart
+            pm2 describe backend > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              pm2 restart backend
+            else
+              pm2 start npm --name backend -- start
+            fi
 
-      pm2 save
+            pm2 save
