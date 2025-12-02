@@ -1,8 +1,8 @@
 import express from "express";
 import multer from "multer";
-import userTable from "../database/userTable.js";// adjust based on your model structure
+import userTable from "../models/userTable.js";// adjust based on your model structure
 import vendorProfilePicToS3 from "../s3/vendorProfilePicToS3.js";
-import vendor from "../database/vendors.js";
+import Vendor from "../models/vendors.js";
 
 const vendorProfilePicUpload = express.Router();
 
@@ -29,7 +29,7 @@ vendorProfilePicUpload.post("/:userId/upload-profile-pic", upload.single("profil
         );
 
         // Update user's profilePic in the DB
-        const updatedUser = await vendor.findByIdAndUpdate(
+        const updatedUser = await Vendor.findByIdAndUpdate(
             userId,
             { profilePic: profilePicUrl },
             { new: true } // returns the updated doc

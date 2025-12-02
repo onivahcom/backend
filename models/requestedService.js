@@ -34,11 +34,24 @@ const requestedServiceSchema = new mongoose.Schema(
             type: [String], // Array of strings
             default: [],
         },
+        cancellationPolicy: {
+            type: String,
+            enum: ["flexible", "moderate", "strict"],
+            default: "moderate",
+            required: true,
+        },
+        paymentPreference: {
+            type: String,
+            enum: ["immediate", "delayed", "scheduled"],
+            default: "moderate",
+            required: true,
+        },
 
     },
     { timestamps: true }
 );
 
-const RequestedService = mongoose.model('RequestedService', requestedServiceSchema);
+const RequestedService =
+    mongoose.models.RequestedService || mongoose.model('RequestedService', requestedServiceSchema);
 
 export default RequestedService;

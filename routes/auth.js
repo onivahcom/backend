@@ -1,7 +1,7 @@
 // routes/auth.js
 import express from "express";
 import jwt from 'jsonwebtoken';
-import RefreshToken from "../database/RefreshToken.js";
+import RefreshToken from "../models/RefreshToken.js";
 import { generateAccessToken, generateRefreshToken } from '../utils/tokenUtils.js';
 import { v4 as uuidv4 } from 'uuid';
 

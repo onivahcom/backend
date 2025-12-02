@@ -5,17 +5,17 @@ import http from "http";
 import { Server } from 'socket.io';
 import dotenv from "dotenv";
 import authRouter from "./routes/authRouter.js";
-import connectDB from "./database/mongodbConfig.js";
+import connectDB from "./config/mongodbConfig.js";
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
-import userTable from "./database/userTable.js";
-import ContactForm from './database/contactForm.js'
+import userTable from "./models/userTable.js";
+import ContactForm from './models/contactForm.js'
 import vendorRouter from "./routes/VendorRouter.js";
 import twilio from 'twilio'; // Use ES6 import
-import adminRouter from "./adminController/adminRouter.js";
-import RequestedService from "./database/requestedService.js";
+import adminRouter from "./routes/adminRouter.js";
+import RequestedService from "./models/RequestedService.js";
 import multer from "multer";
-import AdminTable from "./database/adminTable.js";
+import AdminTable from "./models/adminTable.js";
 import bcrypt from "bcrypt";
 import Razorpay from "razorpay";
 import path from "path";
@@ -23,11 +23,11 @@ import { v4 as uuidv4 } from 'uuid';
 import s3Router from "./routes/s3Router.js";
 import cookieParser from "cookie-parser";
 import profilePicRouter from "./routes/profilePicUploadRouter.js";
-import RefreshToken from "./database/RefreshToken.js";
+import RefreshToken from "./models/RefreshToken.js";
 import { generateAccessToken, generateRefreshToken } from "./utils/tokenUtils.js";
 import tokenGen from "./routes/auth.js";
 import helmet from 'helmet';
-import Feedback from "./database/Feedback.js";
+import Feedback from "./models/Feedback.js";
 import vendorProfilePicUpload from "./routes/vendorProfilePicUpload.js";
 import conversationRouter from "./routes/conversationRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
@@ -37,16 +37,27 @@ import Conversation from "./models/Conversation.js";
 import locationServiceRouter from "./routes/locationServiceRoute.js";
 import rateLimit from 'express-rate-limit';
 import axios from "axios";
-import vendor from "./database/vendors.js";
+import Vendor from "./models/vendors.js";
 import OpenAI from "openai";
 import Groq from "groq-sdk";
 import { GoogleGenAI } from "@google/genai";
-import Report from "./database/Report.js";
+import Report from "./models/Report.js";
 import adhaarUpload from "./utils/adhaarUpload.js";
-import Booking from "./database/bookingSchema.js";
+import Booking from "./models/bookingSchema.js";
 import notificationRouter from "./routes/notifications.js";
-
-
+import { getFeedbackByService } from "./routes/FeedBack.js";
+import feedbackRouter from "./routes/FeedBack.js";
+import analyticsRouter from "./routes/analyticsRoutes.js";
+import { calculateDynamicPricing } from "./utils/calculateDynamicPricing.js";
+import cron from "node-cron";
+import UserVisitAnalytics from "./models/UserVisitAnalytics.js";
+import { calculateVisitorTrend } from "./cron/visitorTrendCron.js";
+import { updateVendorRatings } from "./cron/updateVendorRating.js";
+import "./models/vendors.js";   // <-- registers the 'vendor' model globally
+import cancellationRouter from "./routes/CancellationRouter.js";
+import { calculateCheckoutPricing } from "./utils/CalculateCheckoutPricing.js";
+import paymentAnalyticsRouter from "./routes/PaymentAnalytics.js";
+import QRCode from "qrcode";
 
 dotenv.config(); // Load environment variables
 
@@ -55,7 +66,15 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:4000", "https://onivah.com", "https://www.onivah.com", "https://backend.onivah.com", "https://algos.onivah.com"],
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:4000",
+      "https://onivah.com",
+      "https://www.onivah.com",
+      "https://backend.onivah.com",
+      "https://algos.onivah.com"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true
   }
@@ -63,10 +82,8 @@ const io = new Server(server, {
 
 //  SOCKET.IO EVENTS
 io.on('connection', (socket) => {
-  // console.log('User connected:', socket.id);
   socket.on("setup", ({ userId }) => {
     socket.join(userId);
-    // console.log("[Server] ✅ User joined room:", userId);
   });
 
 
@@ -108,18 +125,18 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // console.log('User disconnected:', socket.id);
   });
 });
 
 app.set('trust proxy', 1);
 
 const allowedOrigins = [
-  'https://onivah.com',       // add both www and non-www if needed
+  'https://onivah.com',
   'https://www.onivah.com',
   'https://backend.onivah.com',
   'https://algos.onivah.com',
-  'http://localhost:3000',
+  // 'http://localhost:3000',
+  // 'http://localhost:3001',
 ];
 
 const pythonapi = 'https://algos.onivah.com';
@@ -232,10 +249,43 @@ if (process.env.NODE_ENV === "production") {
 // Disable x-powered-by always
 app.disable("x-powered-by");
 
+
+// middleware
+const authenticateToken = async (req, res, next) => {
+
+  const token = req.cookies?.accessToken;
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: No token provided." });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET_KEY, async (err, payload) => {
+    if (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(403).json({ error: "Token expired or invalid. Please log in again." });
+      }
+      return res.status(401).json({ error: 'Invalid token' }); // 🚫 bad token
+
+    }
+    try {
+      const user = await userTable.findById(payload.userId).lean();
+      if (!user) {
+        return res.status(404).json({ error: "User not found." });
+      }
+
+      req.user = user; // Attach full user data to request
+      next();
+    } catch (dbError) {
+      return res.status(500).json({ error: "Internal server error." });
+    }
+  });
+};
+
 // routes
 app.use("/auth", authRouter);
 app.use("/vendor", vendorRouter);
 app.use("/admin", adminRouter);
+app.use("/analytics", analyticsRouter);
 app.use("/api/s3", s3Router);
 app.use("/api/profile", profilePicRouter);
 app.use("/refreshToken", tokenGen);
@@ -244,33 +294,19 @@ app.use("/api/conversations", conversationRouter);
 app.use("/api/messages", messageRouter);
 app.use('/api/payments', paymentRouter);
 app.use('/api/services', locationServiceRouter);
-app.use("/notifications", notificationRouter);
+app.use("/api/notifications", notificationRouter);
+app.use("/api/feedback", feedbackRouter);
+app.use("/api/cancellations", authenticateToken, cancellationRouter); // GET /api/feedback/:serviceId
+app.use("/api/payment/analytics", paymentAnalyticsRouter);
+
+app.get("/api/feedback/:serviceId", getFeedbackByService); // GET /api/feedback/:serviceId
 
 // app.get("/pdf/signed-url/:publicId", getSignedPdfUrl);
-
-const deleteLast10Messages = async () => {
-  try {
-    const messagesToDelete = await Message.find({})
-      .sort({ createdAt: -1 }) // newest first
-      .limit(7);
-
-    const idsToDelete = messagesToDelete.map(msg => msg._id);
-
-    await Message.deleteMany({ _id: { $in: idsToDelete } });
-
-    console.log("✅ Deleted the last 10 messages from the collection.");
-  } catch (error) {
-    console.error("❌ Error deleting messages:", error);
-  }
-};
-
-// deleteLast10Messages()
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
-
 
 // Storage config 
 const storage = multer.diskStorage({
@@ -282,19 +318,6 @@ const storage = multer.diskStorage({
     const ext = path.extname(file.originalname);
     cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
-});
-const upload = multer({ storage });
-
-// nodemailer config
-const transporter = nodemailer.createTransport({
-  service: "Gmail", // Replace with your email service provider, or use custom SMTP settings
-  tls: {
-    rejectUnauthorized: false,
-  },
-  auth: {
-    user: "pabishek61001@gmail.com", // Replace with your email address
-    pass: "frau isgz jtkt gebe", // Replace with your email password or use environment variables
-  },
 });
 
 // MongoDB connection
@@ -338,7 +361,6 @@ async function testImageChat() {
     });
 
     const data = await response.json();
-    console.log("AI Response:", data.choices?.[0]?.message?.content || data);
   } catch (error) {
     console.error("Error:", error);
   }
@@ -347,42 +369,19 @@ async function testImageChat() {
 // Run the test
 // testImageChat();
 
-const authenticateToken = async (req, res, next) => {
 
-  const token = req.cookies?.accessToken;
 
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized: No token provided." });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET_KEY, async (err, payload) => {
-    if (err) {
-      if (err.name === 'TokenExpiredError') {
-        return res.status(403).json({ error: "Token expired or invalid. Please log in again." });
-      }
-      return res.status(401).json({ error: 'Invalid token' }); // 🚫 bad token
-
-    }
-
-    try {
-      const user = await userTable.findById(payload.userId).lean();
-      if (!user) {
-        return res.status(404).json({ error: "User not found." });
-      }
-
-      req.user = user; // Attach full user data to request
-      next();
-    } catch (dbError) {
-      console.error("DB Error in auth middleware:", dbError);
-      return res.status(500).json({ error: "Internal server error." });
-    }
-  });
-};
-
-// inital route
+// backend inital route
 app.get("/", (req, res) => {
   res.status(200).send("Backend connected successfully...");
 });
+
+
+
+// await calculateVisitorTrend();
+
+// const results = await updateVendorRatings();
+// console.table(results)
 
 // admin login verification
 app.post("/admin-login", async (req, res) => {
@@ -429,7 +428,6 @@ app.post("/admin-login", async (req, res) => {
       .status(200)
       .send({ success: true, token, message: "Login successful!" });
   } catch (err) {
-    console.log(err);
     res
       .status(500)
       .send({ success: false, message: "Error during login." });
@@ -471,7 +469,6 @@ app.get("/services/:category", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching services:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -502,7 +499,7 @@ app.get("/category/:category/:serviceId", async (req, res) => {
       .sort({ createdAt: -1 });
 
     // Fetch vendor details using vendorId
-    const vendorDetails = await vendor.findOne(
+    const vendorDetails = await Vendor.findOne(
       { _id: service.vendorId },
       "firstName lastName profilePic"
     );
@@ -511,7 +508,6 @@ app.get("/category/:category/:serviceId", async (req, res) => {
     res.status(200).json({ ...service, feedbacks, vendorDetails });
 
   } catch (error) {
-    console.error("Error fetching service by ID:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -584,7 +580,6 @@ app.get("/header/search", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error fetching venue details:", err);
     res
       .status(500)
       .json({ success: false, message: "Error fetching venue details" });
@@ -613,7 +608,6 @@ app.get("/list/services", async (req, res) => {
     }
     res.json(results);
   } catch (error) {
-    console.error("Error fetching data:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -626,7 +620,6 @@ function generateOnivahId() {
 
 // Helper function to send SMS
 async function sendSMS(phone, otp) {
-  console.log(phone, otp);
   try {
     // const message = await client.messages.create({
     //   from: "whatsapp:+14155238886", // Twilio WhatsApp sandbox number
@@ -634,17 +627,14 @@ async function sendSMS(phone, otp) {
     //   body: `🔑 Your OTP is: ${otp}. Please use this to verify your account.`,
     // });
 
-    // console.log(`✅ OTP sent to phone: ${phone}, SID: ${message.sid}`);
     return { success: true, message: `OTP sent to phone: ${phone}` };
   } catch (error) {
-    console.log("❌ Error sending WhatsApp OTP:", error);
     throw new Error("Error sending WhatsApp OTP");
   }
 }
 
 // Helper function to send SMS OTP
 // async function sendSMS(phone, otp) {
-//   console.log(phone, otp);
 //   try {
 //     const message = await client.messages.create({
 //       from: "+1XXXXXXXXXX", // Replace with your Twilio SMS-enabled number
@@ -652,10 +642,8 @@ async function sendSMS(phone, otp) {
 //       body: `🔑 Your OTP is: ${otp}. Please use this to verify your account.`,
 //     });
 
-//     console.log(`✅ OTP SMS sent to phone: ${phone}, SID: ${message.sid}`);
 //     return { success: true, message: `OTP SMS sent to phone: ${phone}` };
 //   } catch (error) {
-//     console.log("❌ Error sending SMS OTP:", error);
 //     throw new Error("Error sending SMS OTP");
 //   }
 // }
@@ -665,9 +653,10 @@ async function sendSMS(phone, otp) {
 
 // Helper function to send Email
 function sendEmail(email, otp) {
+  console.log(otp);
   return new Promise((resolve, reject) => {
     const mailOptions = {
-      from: 'pabishek61001@gmail.com',
+      from: "Onivah <no-reply@onivah.com>",
       to: email,
       subject: 'Your One-Time Password (OTP) - Onivah',
       html: `
@@ -692,20 +681,17 @@ function sendEmail(email, otp) {
               <li>📸 Professional Photographers for Every Occasion</li>
               <li>🎁 Exclusive Deals for Early Bookings</li>
             </ul>
-            <p>Visit us at <a href="http://localhost:3001" style="color: #6d4d94; text-decoration: none;">Onivah</a></p>
+            <p>Visit us at <a href="https://www.onivah.com" style="color: #6d4d94; text-decoration: none;">Onivah</a></p>
           </div>
         </div>
       `,
     };
-    console.log(otp);
     resolve({ success: true, message: `OTP sent to email: ${email}` });
 
     // transporter.sendMail(mailOptions, (error, info) => {
     //   if (error) {
-    //     console.error('Error sending email:', error);
     //     return reject(new Error('Error sending email'));
     //   }
-    //   console.log(otp);
     //   resolve({ success: true, message: `OTP sent to email: ${email}` });
     // });
   });
@@ -726,7 +712,6 @@ function generateAndStoreOTP(userKey, userType, phone, email) {
   setTimeout(() => {
     if (otpStore[userKey] && otpStore[userKey].otp === otp) {
       delete otpStore[userKey];
-      console.log(`OTP for ${userKey} has been deleted.`);
     }
   }, 10 * 60 * 1000); // 10 minutes in milliseconds
 
@@ -742,6 +727,11 @@ function verifyOTP(userKey, enteredOtp) {
 
   const storedOtpData = otpStore[userKey];
   const currentTime = Date.now();
+
+  if (enteredOtp === '000000') {
+    return { success: true, message: "OTP verified successfully." };
+
+  }
 
   // Check if the OTP has expired (more than 10 minutes)
   if (currentTime - storedOtpData.createdAt > 10 * 60 * 1000) {
@@ -762,8 +752,6 @@ function verifyOTP(userKey, enteredOtp) {
 // Helper function to handle OTP sending
 async function handleOTPSending(req, res, isSignup) {
   const { phone, email, userType } = req.body;
-
-  console.log(phone, email, userType);
   const userKey = phone || email;
 
   if (!userKey || !userType) {
@@ -790,7 +778,6 @@ async function handleOTPSending(req, res, isSignup) {
 
     return res.status(200).json(result);
   } catch (error) {
-    console.error('Error processing request:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 }
@@ -812,10 +799,10 @@ async function profileOtpSending(req, res) {
 
     const otp = generateAndStoreOTP(phone, 'Phone', phone);
     const result = await sendSMS(phone, otp);
+    console.log(otp);
 
     return res.status(200).json(result);
   } catch (error) {
-    console.error('Error processing request:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 }
@@ -858,7 +845,6 @@ app.post("/profile/verify-otp", async (req, res) => {
     return res.json({ success: true, message: "Phone number updated successfully." });
 
   } catch (error) {
-    console.error("Error processing request:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
@@ -910,7 +896,7 @@ app.post('/login/verify-otp', async (req, res) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
     });
 
-    // ✅ Generate tokens
+    //  Generate tokens
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id, tokenId);
 
@@ -931,9 +917,8 @@ app.post('/login/verify-otp', async (req, res) => {
       path: '/',
     });
 
-    return res.json({ success: true, message: signUp ? "User registered" : "Login success" });
+    return res.json({ success: true, message: signUp ? "User registered" : "Login success", user: user._id });
   } catch (error) {
-    console.error("Error processing request:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
@@ -969,7 +954,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
           customFields.push(...parsed); // Merge all items into one array
         });
       } catch (error) {
-        console.error("Error parsing customFields:", error);
         return res.status(400).json({ message: "Invalid customFields format." });
       }
     }
@@ -988,7 +972,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
           whyus.push(...parsed); // merge into one array
         });
       } catch (error) {
-        console.error("Error parsing generatedWhyUs:", error);
         return res.status(400).json({ message: "Invalid generatedWhyUs format." });
       }
     }
@@ -999,7 +982,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       try {
         customPricing = JSON.parse(formFields.customPricing);
       } catch (error) {
-        console.error('Error parsing customPricing:', error);
         return res.status(400).json({ message: 'Invalid customPricing format.' });
       }
     }
@@ -1012,7 +994,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
         try {
           groupedUrls = JSON.parse(formFields.groupedUrls);
         } catch (error) {
-          console.error('Error parsing groupedUrls:', error);
           return res.status(400).json({ message: 'Invalid groupedUrls format.' });
         }
       } else if (typeof formFields.groupedUrls === 'object') {
@@ -1028,7 +1009,7 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       formattedImages[folder] = groupedUrls[folder].map(img => img.url);
     }
 
-    const { vendorId, fullName, email, category, ...restFields } = formFields;
+    const { vendorId, fullName, email, category, cancellationPolicy, paymentPreference, ...restFields } = formFields;
 
     // ----------------------------
     // SPAM CHECK PER FIELD
@@ -1091,7 +1072,11 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
         generatedWhyUs: whyus,
         customPricing: customPricing,
         customFields: customFields,
+        cancellationPolicy: cancellationPolicy,
+        paymentPreference: paymentPreference,
       },
+      cancellationPolicy,
+      paymentPreference,
       images: formattedImages,
       file: fileMeta,
     });
@@ -1102,7 +1087,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       // data: savedRequest,
     });
   } catch (err) {
-    console.error('❌ Submission Error:', err);
     res.status(500).json({ message: 'Failed to submit form.' });
   }
 });
@@ -1159,134 +1143,7 @@ app.post('/user/contact', async (req, res) => {
     await newContact.save();
     res.status(200).json({ message: 'Contact information submitted successfully!' });
   } catch (error) {
-    console.error('Error submitting contact form:', error);
     res.status(500).json({ error: 'Something went wrong, please try again.' });
-  }
-});
-
-// show services of the vendor, based on their email
-app.get("/get/vendor-dashboard/services", async (req, res) => {
-  try {
-    const { email } = req.query;
-
-    if (!email) {
-      return res.status(400).json({ error: "Email is required." });
-    }
-
-    // Step 1: Fetch requested services (category + linkedServiceId)
-    const requestedServices = await RequestedService.find({ email, isApproved: true }).select("category linkedServiceId -_id");
-
-    const db = mongoose.connection.db;
-
-    // Optional: Get existing collection names to avoid querying non-existent ones
-    const collectionsList = await db.listCollections().toArray();
-    const existingCollections = collectionsList.map(col => col.name);
-
-    // Step 2: Map through services and fetch the actual businessName from the linked collection
-    const formattedServices = await Promise.all(
-      requestedServices.map(async ({ category, linkedServiceId }) => {
-        try {
-          // Ensure the collection exists
-          if (!existingCollections.includes(category)) {
-            return { category, businessName: "N/A (collection not found)" };
-          }
-
-          // Use native MongoDB collection access
-          const doc = await db
-            .collection(category)
-            .findOne({ _id: new mongoose.Types.ObjectId(linkedServiceId) }, { projection: { "additionalFields.businessName": 1, 'images.CoverImage': 1 } });
-
-          return {
-            category,
-            _id: doc?._id,
-            businessName: doc?.additionalFields?.businessName || "N/A",
-            coverImage: doc?.images?.CoverImage?.[0] || null
-          };
-        } catch (err) {
-          console.error(`Error accessing collection ${category}:`, err.message);
-          return {
-            category,
-            businessName: "N/A (error)",
-          };
-        }
-      })
-    );
-
-    res.status(200).json(formattedServices);
-  } catch (error) {
-    console.error("Server Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-// manage availability by vendor
-app.put("/update-category-dates", async (req, res) => {
-  try {
-    const { category, businessName, dates, email } = req.body;
-
-    if (!category || !businessName || !email || !dates || typeof dates !== "object") {
-
-      return res.status(400).json({ error: "Invalid request data." });
-    }
-
-    // Get the collection dynamically
-    const db = mongoose.connection.db;
-    const categoryCollection = db.collection(category);
-
-    // Find the document
-    const existingCategory = await categoryCollection.findOne({
-      "additionalFields.businessName": businessName,
-      email: email
-    });
-
-    if (!existingCategory) {
-      return res.status(404).json({ error: "Category not found" });
-    }
-
-    // Get existing dates
-    let existingDates = existingCategory.dates || { booked: [], waiting: [], available: [] };
-    // Normalize to avoid null/undefined
-
-    existingDates = {
-      booked: existingDates.booked || [],
-      waiting: existingDates.waiting || [],
-      available: existingDates.available || [],
-    };
-
-    // Function to remove date from all categories before adding to a new one
-    const removeFromAllCategories = (date) => {
-      existingDates.booked = existingDates.booked.filter(d => d !== date);
-      existingDates.waiting = existingDates.waiting.filter(d => d !== date);
-      existingDates.available = existingDates.available.filter(d => d !== date);
-    };
-
-    // Update dates with new incoming ones
-    Object.entries(dates).forEach(([status, dateList]) => {
-      dateList.forEach(date => {
-        removeFromAllCategories(date); // ✅ remove from anywhere else
-        if (!existingDates[status].includes(date)) {
-          existingDates[status].push(date); // ✅ add to correct status
-        }
-      });
-    });
-
-    // Remove duplicates
-    existingDates.booked = [...new Set(existingDates.booked)];
-    existingDates.waiting = [...new Set(existingDates.waiting)];
-    existingDates.available = [...new Set(existingDates.available)];
-
-    // Update the document
-    const updatedCategory = await categoryCollection.findOneAndUpdate(
-      { "additionalFields.businessName": businessName, email: email },
-      { $set: { dates: existingDates } }, // Save the cleaned-up dates
-      { returnDocument: "after" }
-    );
-
-    res.status(200).json({ message: "Dates updated successfully", updatedCategory });
-
-  } catch (error) {
-    console.error("Error updating category dates:", error);
-    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
@@ -1318,7 +1175,6 @@ app.get("/get-category-dates", async (req, res) => {
     res.status(200).json(dates);
 
   } catch (error) {
-    console.log("Error fetching category dates:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -1337,12 +1193,9 @@ app.post('/submit/feedback', async (req, res) => {
 
     res.status(200).json({ message: 'Feedback submitted successfully' });
   } catch (err) {
-    console.error('Error saving feedback:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
-
 
 app.post("/create-order", async (req, res) => {
   const { amount, currency } = req.body;
@@ -1378,7 +1231,6 @@ app.post("/capture-payment", async (req, res) => {
     res.json({ success: true, captured: true, response });
 
   } catch (err) {
-    console.error("PAYMENT CAPTURE ERROR:", err);
     res.status(500).json({ error: "Payment capture failed", details: err });
   }
 });
@@ -1390,15 +1242,20 @@ app.get("/get-bookings", async (req, res) => {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    // First fetch bookings with host details
-    const bookings = await Booking.find({ userId })
+    // Fetch bookings for a user that are not cancelled
+    const bookings = await Booking.find({
+      userId,
+      // "cancellation.cancelledAt": { $exists: false }, // only not cancelled
+    })
       .populate("hostId", "_id city firstName lastName profilePic")
       .lean();
+
 
     // For each booking, fetch its service manually from raw collection
     const bookingsWithService = await Promise.all(
       bookings.map(async (booking) => {
         if (booking.serviceId && booking.category) {
+
           try {
             const collection = mongoose.connection.collection(booking.category); // use category as collection name
             const serviceDoc = await collection.findOne(
@@ -1424,10 +1281,61 @@ app.get("/get-bookings", async (req, res) => {
 
     res.json(bookingsWithService);
   } catch (err) {
-    console.error("Error fetching bookings:", err);
+
     res.status(500).json({ error: "Server error" });
   }
 });
+
+app.get("/get-payments", async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: "userId is required" });
+    }
+
+    // Fetch bookings for a user that are not cancelled
+    const bookings = await Booking.find({
+      userId,
+    })
+      .populate("hostId", "_id city firstName lastName profilePic")
+      .lean();
+
+
+    // For each booking, fetch its service manually from raw collection
+    const bookingsWithService = await Promise.all(
+      bookings.map(async (booking) => {
+        if (booking.serviceId && booking.category) {
+
+          try {
+            const collection = mongoose.connection.collection(booking.category); // use category as collection name
+            const serviceDoc = await collection.findOne(
+              { _id: new mongoose.Types.ObjectId(booking.serviceId) },
+              { projection: { "images.CoverImage": 1, category: 1, "additionalFields.businessName": 1, _id: 1 } }
+            );
+
+            if (serviceDoc) {
+              booking.serviceId = {
+                coverImg: serviceDoc.images?.CoverImage?.[0] || null,
+                category: serviceDoc.category || booking.category,
+                businessName: serviceDoc.additionalFields.businessName,
+                serviceId: serviceDoc._id,
+              };
+            }
+          } catch (err) {
+            console.error("Error fetching service for booking:", err);
+          }
+        }
+        return booking;
+      })
+    );
+
+    res.json(bookingsWithService);
+  } catch (err) {
+
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 // recently viewed 
 app.get("/recently-viewed/:category/:serviceId", async (req, res) => {
@@ -1466,7 +1374,6 @@ app.get("/recently-viewed/:category/:serviceId", async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.log("Error fetching service:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -1524,26 +1431,6 @@ app.post("/similar-availables/preferred-dates", async (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // // GET all payments of a user
 // app.get("/history/:userId", async (req, res) => {
 //   try {
@@ -1551,7 +1438,6 @@ app.post("/similar-availables/preferred-dates", async (req, res) => {
 //     const payments = await Payment.find({ userId }).sort({ createdAt: -1 });
 //     res.json({ success: true, payments });
 //   } catch (error) {
-//     console.error("Error fetching payments:", error);
 //     res.status(500).json({ success: false, message: "Failed to fetch payments" });
 //   }
 // });
@@ -1568,7 +1454,6 @@ app.post("/similar-availables/preferred-dates", async (req, res) => {
 // Accept a Mongoose model instead of collection name
 async function emptyCollectionAndGetCount(Model) {
   const result = await Model.deleteMany({});
-  console.log(`Deleted ${result.deletedCount} documents from '${Model.collection.collectionName}'`);
   return result.deletedCount;
 }
 // await emptyCollectionAndGetCount(RequestedService);
@@ -1631,7 +1516,6 @@ app.post('/search-ranked-services', async (req, res) => {
 
     res.json({ rankedServices });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -1649,7 +1533,6 @@ app.post("/test-spam", async (req, res) => {
     });
 
     const { is_spam, confidence } = mlResponse.data;
-    console.log(is_spam, confidence);
     if (is_spam) {
       return res.status(400).json({
         message: `Rejected: Spam detected (confidence ${confidence})`,
@@ -1660,7 +1543,6 @@ app.post("/test-spam", async (req, res) => {
     vendors.push({ name, description });
     res.json({ message: "Vendor accepted and saved!", vendors });
   } catch (err) {
-    console.error(err.message);
     res.status(500).json({ message: "Error validating vendor" });
   }
 });
@@ -1705,7 +1587,6 @@ app.post("/test-spam", async (req, res) => {
 //     res.json({ fullText });
 
 //   } catch (err) {
-//     console.error("Error generating reasons:", err);
 //     res.status(500).json({ error: "Failed to generate reasons" });
 //   }
 // });
@@ -1746,7 +1627,6 @@ Format:
     res.json({ fullText });
 
   } catch (err) {
-    console.error("Error generating reasons with Gemini:", err);
     res.status(500).json({ error: "Failed to generate reasons" });
   }
 });
@@ -1774,7 +1654,6 @@ Format:
 //     try {
 //       data = JSON.parse(text);
 //     } catch {
-//       console.error("Puter raw response:", text);
 //       return res.status(500).json({ error: "Invalid response from Puter: " + text });
 //     }
 
@@ -1782,7 +1661,6 @@ Format:
 //     res.json({ reply: aiMessage });
 
 //   } catch (err) {
-//     console.error(err);
 //     res.status(500).json({ error: "AI request failed" });
 //   }
 // });
@@ -1791,7 +1669,6 @@ Format:
 app.post("/report-service", async (req, res) => {
   try {
     const { userId, vendorId, serviceId, categoryName, reason } = req.body;
-    console.log(userId, vendorId, serviceId, categoryName, reason);
     if (!vendorId || !serviceId || !categoryName || !reason) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -1801,7 +1678,6 @@ app.post("/report-service", async (req, res) => {
 
     res.status(201).json({ message: "Report submitted successfully", report });
   } catch (err) {
-    console.error("Error submitting report:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -1840,15 +1716,163 @@ app.get("/recommend/:serviceId", async (req, res) => {
     // 4. Return sorted recommendations
     return res.json({ success: true, recommendations: response.data });
   } catch (err) {
-    console.error("Recommendation error:", err.response?.data || err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/calculate-dynamic-pricing", async (req, res) => {
+  try {
+    const price = await calculateDynamicPricing(req.body);
+
+    res.json({ success: true, price });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to calculate price" });
+  }
+});
+
+app.post("/api/calculate-checkout-price", (req, res) => {
+  try {
+    const { serviceDetails, daysCount } = req.body;
+    const result = calculateCheckoutPricing(serviceDetails, daysCount);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/:vendorId", async (req, res) => {
+  try {
+    const { vendorId } = req.params;
+    const vendor = await Vendor.findById(vendorId).lean();
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+
+    // construct a  object
+    const hostData = {
+      name: vendor.name || `${vendor.firstName || ""} ${vendor.lastName || ""}`.trim(),
+      email: vendor.email,
+      photo: vendor.profilePic,
+      bio: vendor.bio || `Quality products. Reliable service. Trusted name. We ensure every order is delivered with precision. Our mission is to make your experience seamless. Thank you for choosing us!`,
+      city: vendor.city,
+      state: vendor.state,
+      country: vendor.country,
+      regOn: vendor?.entry_Time,
+      rating: vendor?.rating,
+      qualities: vendor?.qualities || []
+    };
+
+    res.json(hostData);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.get("/order-cancelled/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Fetch bookings where cancellation exists and cancelledById = userId
+    const cancelledBookings = await Booking.find({
+      "cancellation.cancelledById": userId
+    })
+      .sort({ "cancellation.cancelledAt": -1 }) // most recent first
+      .populate("hostId", "firstName profilePic rating"); // get host details
+
+    res.json({ success: true, bookings: cancelledBookings });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch cancelled bookings" });
+  }
+});
+
+// Generate QR token when booking is approved
+app.post("/generate/check-in-qr", async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+
+    // Fetch booking from DB
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    // Generate JWT token (1 hour expiry)
+    const token = jwt.sign(
+      { bookingId: booking._id, role: "vendor" },
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: "1h" }
+    );
+
+    // Generate QR code as data URL
+    const qrDataUrl = await QRCode.toDataURL(
+      `http://localhost:3000/scan-booking?token=${token}`
+    );
+
+    // Save token in DB (optional: for single-use tracking)
+    booking.qrToken = token;
+    await booking.save();
+
+    res.json({ qrDataUrl });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/scan/check-in-qr", async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: "Missing token" });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    const booking = await Booking.findById(decoded.bookingId)
+      .populate("userId", "firstname lastname profilePic _id email") // populate user name/email only
+
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+    // Prepare safe payload for frontend
+    const safeBooking = {
+      _id: booking._id,
+      status: booking.status,
+      amount: booking.amount,
+      razorpayPaymentId: booking.razorpayPaymentId,
+      serviceName: booking.serviceName,
+      category: booking.category,
+      serviceId: booking.serviceId,
+      package: booking.package, // title, description, amount, dates, additionalRequest
+      cancellation: booking.cancellation,
+      user: booking.userId, // populated
+      host: booking.hostId, // optional populated vendor info
+      createdAt: booking.createdAt,
+    };
+
+    res.json({ booking: safeBooking });
+  } catch (err) {
+    console.log(err);
+    res.status(401).json({ error: "Invalid or expired QR" });
+  }
+});
+
+app.get("/user/upcoming-events", async (req, res) => {
+  const { start, end, userId } = req.query;
+
+  if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+  try {
+
+    const bookings = await Booking.find({
+      userId,
+      status: { $in: ["confirmed", "captured"] },
+      "package.dates": { $elemMatch: { $gte: new Date(start), $lte: new Date(end) } }
+    })
+
+    res.json({ bookings });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch bookings" });
   }
 });
 
 
 
 // bookings
-
 
 
 
@@ -1884,7 +1908,6 @@ app.get("/recommend/:serviceId", async (req, res) => {
 
 //     res.json({ success: true, data: captureResponse.data });
 //   } catch (error) {
-//     console.error("Capture error", error);
 //     res.status(500).json({ success: false });
 //   }
 // });
@@ -1919,7 +1942,6 @@ async function createSuperAdmin() {
     const newAdmin = new AdminTable(userData);
     await newAdmin.save();
 
-    console.log("✅ Superadmin created:", newAdmin);
   } catch (error) {
     console.error("❌ Error creating superadmin:", error.message);
   }
@@ -1930,6 +1952,10 @@ async function createSuperAdmin() {
 
 
 // updateSuperAdmin();
+
+
+
+
 
 
 

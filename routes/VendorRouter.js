@@ -1,6 +1,6 @@
 import express from "express";
 import nodemailer from "nodemailer"
-import vendor from "../database/vendors.js";
+import Vendor from "../models/vendors.js";
 import jwt from "jsonwebtoken";
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,11 +8,12 @@ import multer from "multer";
 import fs from 'fs'
 import twilio from 'twilio'; // Use ES6 import
 import bcrypt from 'bcrypt'; // To hash the password
-import RequestedService from "../database/requestedService.js";
+import RequestedService from "../models/RequestedService.js";
 import mongoose from "mongoose";
-import Feedback from "../database/Feedback.js";
+import Feedback from "../models/Feedback.js";
 import Message from "../models/Message.js";
-import Booking from "../database/bookingSchema.js";
+import Booking from "../models/bookingSchema.js";
+import { ServicePricingConfig } from "../models/ServicePricingConfig.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,7 +89,7 @@ const vendorAuth = async (req, res, next) => {
         const { id } = decoded;
 
         // Find the vendor using the decoded email and phone
-        const vendorData = await vendor.findById(id).lean();
+        const vendorData = await Vendor.findById(id).lean();
 
         if (!vendorData) {
             res.clearCookie('vd_token', {
@@ -212,7 +213,7 @@ vendorRouter.post('/set-password', async (req, res) => {
 
     try {
         // Check if user already exists
-        const userExists = await vendor.findOne({
+        const userExists = await Vendor.findOne({
             $or: [{ email }, { phone }],
         });
 
@@ -355,7 +356,7 @@ vendorRouter.post('/send-otp', async (req, res) => {
 
         if (type === 'email' && email) {
             // If email is provided, check if the user already exists by email
-            let user = await vendor.findOne({ email: email });
+            let user = await Vendor.findOne({ email: email });
 
             if (user) {
                 return res.status(404).json({ message: 'Email already registered' });
@@ -367,7 +368,7 @@ vendorRouter.post('/send-otp', async (req, res) => {
 
         } else if (type === 'phone' && phone) {
             // If phone is provided, check if the user already exists by phone
-            let user = await vendor.findOne({ phone: phone });
+            let user = await Vendor.findOne({ phone: phone });
 
             if (user) {
                 return res.status(404).json({ message: 'Phone number already registered' });
@@ -400,10 +401,10 @@ vendorRouter.post('/vendor-login', async (req, res) => {
 
         if (email) {
             // Search by email
-            user = await vendor.findOne({ email });
+            user = await Vendor.findOne({ email });
         } else if (phone) {
             // Search by phone
-            user = await vendor.findOne({ phone });
+            user = await Vendor.findOne({ phone });
         }
 
         if (!user) {
@@ -449,7 +450,8 @@ vendorRouter.put('/profile/update/:vendorId', vendorAuth, async (req, res) => {
     try {
         const { vendorId } = req.params;
         const updatedFields = req.body;
-        const updatedVendor = await vendor.findByIdAndUpdate(vendorId, { $set: updatedFields }, { new: true });
+
+        const updatedVendor = await Vendor.findByIdAndUpdate(vendorId, { $set: updatedFields }, { new: true });
         if (!updatedVendor) {
             return res.status(404).json({ error: 'Vendor not found' });
         }
@@ -477,6 +479,36 @@ vendorRouter.get("/fetch/services", vendorAuth, async (req, res) => {
         res.status(500).json({ message: "Server error", error: err.message });
     }
 });
+
+// ✅ Fetch vendor services by vendorId (simplified data)
+vendorRouter.get("/:vendorId/services", vendorAuth, async (req, res) => {
+    try {
+        const { vendorId } = req.params;
+        if (!vendorId) {
+            return res.status(400).json({ message: "Vendor ID is required" });
+        }
+
+        const services = await RequestedService.find({
+            vendorId: vendorId,
+            isApproved: true,
+        });
+
+        // Transform response to include only required fields
+        const formattedServices = services.map((service) => ({
+            businessName: service.additionalFields?.businessName || "N/A",
+            linkedServiceId: service.linkedServiceId || null,
+            category: service.category || "Unknown",
+            coverImage: service.images?.get("CoverImage")
+        }));
+
+        res.json({ success: true, services: formattedServices });
+    } catch (err) {
+        res.status(500).json({ message: "Server error", error: err.message });
+    }
+});
+
+
+
 
 // get images for a specific vendor using email
 vendorRouter.get('/fetch/:email/images', vendorAuth, async (req, res) => {
@@ -911,6 +943,285 @@ vendorRouter.get("/pending-orders/count", vendorAuth, async (req, res) => {
         res.status(500).json({ message: "Server Error", error });
     }
 });
+
+
+// show services of the vendor, based on their email
+vendorRouter.get("/manage-dates", async (req, res) => {
+    try {
+        const { email } = req.query;
+
+        if (!email) {
+            return res.status(400).json({ error: "Email is required." });
+        }
+
+        // Step 1: Fetch requested services (category + linkedServiceId)
+        const requestedServices = await RequestedService.find({ email, isApproved: true }).select("category linkedServiceId -_id");
+
+        const db = mongoose.connection.db;
+
+        // Optional: Get existing collection names to avoid querying non-existent ones
+        const collectionsList = await db.listCollections().toArray();
+        const existingCollections = collectionsList.map(col => col.name);
+
+        // Step 2: Map through services and fetch the actual businessName from the linked collection
+        const formattedServices = await Promise.all(
+            requestedServices.map(async ({ category, linkedServiceId }) => {
+                try {
+                    // Ensure the collection exists
+                    if (!existingCollections.includes(category)) {
+                        return { category, businessName: "N/A (collection not found)" };
+                    }
+
+                    // Use native MongoDB collection access
+                    const doc = await db
+                        .collection(category)
+                        .findOne({ _id: new mongoose.Types.ObjectId(linkedServiceId) }, { projection: { "additionalFields.businessName": 1, 'images.CoverImage': 1 } });
+
+                    return {
+                        category,
+                        _id: doc?._id,
+                        businessName: doc?.additionalFields?.businessName || "N/A",
+                        coverImage: doc?.images?.CoverImage?.[0] || null
+                    };
+                } catch (err) {
+                    return {
+                        category,
+                        businessName: "N/A (error)",
+                    };
+                }
+            })
+        );
+
+        res.status(200).json(formattedServices);
+    } catch (error) {
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+// manage availability by vendor
+vendorRouter.put("/update-category-dates", async (req, res) => {
+    try {
+        const { category, businessName, dates, email } = req.body;
+
+        if (!category || !businessName || !email || !dates || typeof dates !== "object") {
+
+            return res.status(400).json({ error: "Invalid request data." });
+        }
+
+        // Get the collection dynamically
+        const db = mongoose.connection.db;
+        const categoryCollection = db.collection(category);
+
+        // Find the document
+        const existingCategory = await categoryCollection.findOne({
+            "additionalFields.businessName": businessName,
+            email: email
+        });
+
+        if (!existingCategory) {
+            return res.status(404).json({ error: "Category not found" });
+        }
+
+        // Get existing dates
+        let existingDates = existingCategory.dates || { booked: [], waiting: [], available: [] };
+        // Normalize to avoid null/undefined
+
+        existingDates = {
+            booked: existingDates.booked || [],
+            waiting: existingDates.waiting || [],
+            available: existingDates.available || [],
+        };
+
+        const normalize = d => d.split('T')[0]; // keep YYYY-MM-DD only
+
+        const removeFromAllCategories = (date) => {
+            existingDates.booked = existingDates.booked.filter(d => normalize(d) !== normalize(date));
+            existingDates.waiting = existingDates.waiting.filter(d => normalize(d) !== normalize(date));
+            existingDates.available = existingDates.available.filter(d => normalize(d) !== normalize(date));
+        };
+
+        // Update dates with new incoming ones
+        Object.entries(dates).forEach(([status, dateList]) => {
+            dateList.forEach(date => {
+                removeFromAllCategories(date); // ✅ remove from anywhere else
+                if (!existingDates[status].includes(date)) {
+                    existingDates[status].push(date); // ✅ add to correct status
+                }
+            });
+        });
+
+        // Remove duplicates
+        existingDates.booked = [...new Set(existingDates.booked)];
+        existingDates.waiting = [...new Set(existingDates.waiting)];
+        existingDates.available = [...new Set(existingDates.available)];
+
+        // Update the document
+        const updatedCategory = await categoryCollection.findOneAndUpdate(
+            { "additionalFields.businessName": businessName, email: email },
+            { $set: { dates: existingDates } }, // Save the cleaned-up dates
+            { returnDocument: "after" }
+        );
+
+        res.status(200).json({ message: "Dates updated successfully", updatedCategory });
+
+    } catch (error) {
+        console.error("Error updating category dates:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+
+vendorRouter.get("/service-bookings", async (req, res) => {
+    try {
+        const { category, serviceId } = req.query;
+
+        if (!category || !serviceId) {
+            return res.status(400).json({ error: "category and serviceId are required" });
+        }
+
+        // Fetch bookings for this serviceId & category
+        const bookings = await Booking.find({
+            category,
+            serviceId: new mongoose.Types.ObjectId(serviceId),
+        })
+            .populate("userId", "firstname email") // user details
+            .sort({ "package.dates": 1 });
+
+        // Format response with required fields
+        const formattedBookings = bookings.map(b => ({
+            bookingId: b._id,
+            user: {
+                id: b.userId?._id,
+                name: b.userId?.firstname || "N/A",
+                email: b.userId?.email || "N/A",
+            },
+            service: {
+                category: b.category,
+                serviceId: b.serviceId,
+                name: b.serviceName,
+            },
+            package: {
+                title: b.package.title,
+                description: b.package.description,
+                amount: b.package.amount,
+                dates: b.package.dates,
+                additionalRequest: b.package.additionalRequest,
+            },
+            amount: b.amount,
+            status: b.status,
+            payment: {
+                orderId: b.razorpayOrderId,
+                paymentId: b.razorpayPaymentId,
+            },
+            // rejection: b.rejection || null,
+            // createdAt: b.createdAt,
+        }));
+
+        res.status(200).json(formattedBookings);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+// show services of the vendor, based on their email
+vendorRouter.get("/get-vendor-services", async (req, res) => {
+    try {
+        const { email } = req.query;
+
+        if (!email) {
+            return res.status(400).json({ error: "Email is required." });
+        }
+
+        // Step 1: Fetch requested services (category + linkedServiceId)
+        const requestedServices = await RequestedService.find({ email, isApproved: true }).select("category linkedServiceId -_id");
+
+        const db = mongoose.connection.db;
+
+        // Optional: Get existing collection names to avoid querying non-existent ones
+        const collectionsList = await db.listCollections().toArray();
+        const existingCollections = collectionsList.map(col => col.name);
+
+        // Step 2: Map through services and fetch the actual businessName from the linked collection
+        const formattedServices = await Promise.all(
+            requestedServices.map(async ({ category, linkedServiceId }) => {
+                try {
+                    // Ensure the collection exists
+                    if (!existingCollections.includes(category)) {
+                        return { category, businessName: "N/A (collection not found)" };
+                    }
+
+                    // Use native MongoDB collection access
+                    const doc = await db
+                        .collection(category)
+                        .findOne({ _id: new mongoose.Types.ObjectId(linkedServiceId) }, { projection: { "additionalFields.businessName": 1, 'images.CoverImage': 1 } });
+
+                    return {
+                        category,
+                        _id: doc?._id,
+                        businessName: doc?.additionalFields?.businessName || "N/A",
+                        coverImage: doc?.images?.CoverImage?.[0] || null
+                    };
+                } catch (err) {
+                    return {
+                        category,
+                        businessName: "N/A (error)",
+                    };
+                }
+            })
+        );
+
+        res.status(200).json(formattedServices);
+    } catch (error) {
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+
+//  Get pricing config for a specific service
+vendorRouter.get("/pricing-config/:serviceId", async (req, res) => {
+    try {
+        const { serviceId } = req.params;
+
+        const config = await ServicePricingConfig.findOne({ serviceId })
+            .sort({ createdAt: -1 }) // latest config for this service
+            .lean();
+
+        if (!config) return res.status(404).json({ message: "No config found for this service" });
+
+        res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+//  Always insert a new pricing config (no overwrite)
+vendorRouter.post("/pricing-config/update", async (req, res) => {
+    try {
+        const { serviceId, category, peakDays, peakMonths, specialDates, highDemandLocations } = req.body;
+
+        const newConfig = new ServicePricingConfig({
+            serviceId,
+            category,
+            peakDays,
+            peakMonths,
+            specialDates,
+            highDemandLocations,
+        });
+
+        await newConfig.save();
+
+        res.json({
+            success: true,
+            message: "✅ New configuration inserted successfully",
+            config: newConfig,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 
 export default vendorRouter;

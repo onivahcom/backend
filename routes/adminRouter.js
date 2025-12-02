@@ -1,17 +1,19 @@
 import express from "express";
 import nodemailer from "nodemailer"
-import vendor from "../database/vendors.js";
+import Vendor from "../models/vendors.js";
 import jwt from "jsonwebtoken";
-import ContactForm from "../database/contactForm.js";
-import RequestedService from "../database/requestedService.js";
-import userTable from "../database/userTable.js";
-import VendorsTable from "../database/VendorTable.js";
-import AdminTable from "../database/adminTable.js";
+import ContactForm from "../models/contactForm.js";
+import RequestedService from "../models/RequestedService.js";
+import userTable from "../models/userTable.js";
+import VendorsTable from "../models/VendorTable.js";
+import AdminTable from "../models/adminTable.js";
 import mongoose from "mongoose";
-import ApprovalLog from "../database/ApprovalLog.js";
+import ApprovalLog from "../models/ApprovalLog.js";
 import cors from "cors";
 import cloudinary from "../config/cloudinary.js";
 import bcrypt from "bcrypt";
+import { ServicePricingConfig } from "../models/ServicePricingConfig.js";
+import Transactions from "../models/Transactions.js";
 
 
 const adminRouter = express.Router();
@@ -425,7 +427,7 @@ adminRouter.post("/approve-service", verifyToken, authorize('view_approved_reque
 // get all vendors
 adminRouter.get("/list/vendor", verifyToken, authorize('view_vendors'), async (req, res) => {
     try {
-        const vendors = await vendor.find();
+        const vendors = await Vendor.find();
         res.json(vendors);
     } catch (error) {
         console.error(error);
@@ -457,7 +459,7 @@ adminRouter.get("/users/:id", verifyToken, authorize('view_user_profile'), async
 // get vendor based on id
 adminRouter.get("/vendor/:id", verifyToken, authorize('view_vendor_profile'), async (req, res) => {
     try {
-        const user = await vendor.findById(req.params.id);
+        const user = await Vendor.findById(req.params.id);
         if (!user) return res.status(404).json({ message: "User not found" });
         res.json(user);
     } catch (error) {
@@ -767,10 +769,153 @@ adminRouter.post("/search/manage-users", verifyToken, authorize('manage_users'),
             data: user,
         });
     } catch (error) {
-        console.log("Error searching user:", error);
         return res.status(500).json({ message: "Server error" });
     }
 });
+
+
+// ✅ Get pricing config for a category
+adminRouter.get("/pricing-config/:category", async (req, res) => {
+    try {
+        const { category } = req.params;
+        const config = await ServicePricingConfig.findOne({ category })
+            .sort({ createdAt: -1 }) //  Get latest created config
+            .lean();
+
+        if (!config) return res.status(404).json({ message: "No config found" });
+        res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ✅ Always insert a new pricing config (no overwrite)
+adminRouter.post("/pricing-config/update", async (req, res) => {
+    try {
+        const { category, peakDays, peakMonths, specialDates, highDemandLocations, admin } = req.body;
+
+
+        const newConfig = new ServicePricingConfig({
+            category,
+            peakDays,
+            peakMonths,
+            specialDates,
+            highDemandLocations,
+            editedBy: admin || "Unknown",
+        });
+
+        await newConfig.save();
+
+        res.json({
+            success: true,
+            message: "✅ New configuration inserted successfully",
+            config: newConfig,
+        });
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/search-recipient?type=vendor&search=abc
+adminRouter.get("/search-recipient", async (req, res) => {
+    try {
+        const { type, search } = req.query;
+
+        console.log(type, search);
+
+        if (!["vendor", "user"].includes(type)) {
+            return res.status(400).json({ message: "Invalid type. Must be 'user' or 'vendor'." });
+        }
+
+        let results = [];
+        const regex = search ? { $regex: search, $options: "i" } : {};
+
+        if (type === "vendor") {
+            results = await Vendor.find({ firstName: regex }).limit(20).select("firstName lastName email city state country _id");
+        } else if (type === "user") {
+            results = await userTable.find({ firstname: regex }).limit(20).select("firstname lastname email city state country _id");
+        }
+        console.log(results);
+        res.json(results);
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+//    GET ALL TRANSACTIONS
+adminRouter.get("/get-transactions", async (req, res) => {
+    try {
+        const txns = await Transactions.find()
+            .populate({
+                path: "userId",
+                model: "userTables",
+                select: "firstname lastname email phone profilePic city state"
+            })
+            .populate({
+                path: "hostId",
+                model: "Vendor",
+                select: "firstName lastName name phone businessName city state profilePic"
+            })
+            .populate({
+                path: "bookingId",
+                model: "Booking"
+            });
+
+        res.json({
+            success: true,
+            data: txns
+        });
+
+    } catch (err) {
+        console.error("Transaction list error:", err);
+        res.status(500).json({ success: false, error: "Server error" });
+    }
+});
+
+//    GET SINGLE TRANSACTION BY ID
+adminRouter.get("/get-transaction/:id", async (req, res) => {
+    try {
+        const txn = await Transactions.findById(req.params.id)
+            .populate({
+                path: "userId",
+                select: "firstname lastname email phone city state country zipcode profilePic _id"
+            })
+            .populate({
+                path: "hostId",
+                select: "firstName lastName businessName city state country email phone profilePic _id"
+            })
+            .populate({
+                path: "bookingId",
+                populate: [
+                    {
+                        path: "userId",
+                        select: "firstname lastname email phone"
+                    },
+                    {
+                        path: "hostId",
+                        select: "firstName lastName businessName city state"
+                    }
+                ]
+            });
+
+        if (!txn) {
+            return res.status(404).json({ success: false, error: "Transaction not found" });
+        }
+
+        res.json({ success: true, data: txn });
+
+    } catch (err) {
+        console.error("Single transaction fetch error:", err);
+        res.status(500).json({ success: false, error: "Server error" });
+    }
+});
+
+
+
+
+
 
 // log out
 adminRouter.post("/logout", (req, res) => {

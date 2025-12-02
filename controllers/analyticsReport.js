@@ -47,4 +47,7 @@ const fetchPageVisits = async () => {
     }
 };
 
+
+
+
 export default fetchPageVisits;

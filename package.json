@@ -1,5 +1,5 @@
 {
-  "name": "janmadinam-backend",
+  "name": "onivah-backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -44,6 +44,7 @@
     "nodemon": "^3.0.1",
     "openai": "^5.12.2",
     "pdf-to-excel": "^0.3.2",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.6",
     "sha256": "^0.2.0",
     "socket.io": "^4.8.1",

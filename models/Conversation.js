@@ -9,7 +9,7 @@ const conversationSchema = new mongoose.Schema(
         },
         vendorId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'vendor',
+            ref: 'Vendor',
             required: true
         },
         serviceId: {

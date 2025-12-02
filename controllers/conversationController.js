@@ -100,7 +100,7 @@ export const getUserConversations = async (req, res) => {
 
         res.status(200).json({ conversations: populatedConversations });
     } catch (error) {
-        console.error('❌ Error fetching user conversations:', error);
+        console.log('❌ Error fetching user conversations:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };

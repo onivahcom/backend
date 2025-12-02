@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema({
     zipcode: { type: String },  // User's zipcode
     profilePic: { type: String }, // <- make sure this is present
 
+}, {
+    timestamps: true
 });
 
 // Create the model for the user collection

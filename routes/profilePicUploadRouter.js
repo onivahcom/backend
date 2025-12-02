@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import uploadProfilePictureToS3 from "../s3/uploadProfilePictureToS3.js";
-import userTable from "../database/userTable.js";// adjust based on your model structure
+import userTable from "../models/userTable.js";// adjust based on your model structure
 
 const profilePicRouter = express.Router();
 
