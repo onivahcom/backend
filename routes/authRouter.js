@@ -7,9 +7,6 @@ router.get("/google", (req, res, next) => {
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
 
-    // Log to check if headers are being applied
-    console.log("COOP/COEP Headers applied to /google");
-
     next(); // Proceed to the googleLogin handler
 }, googleLogin);
 

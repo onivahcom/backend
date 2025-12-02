@@ -22,13 +22,10 @@ s3Router.post("/upload-images", upload.array("images"), async (req, res) => {
             fileFolderMap[fileName] = folderName;
         });
 
-        // console.log(fileFolderMap);
-
         // Object to group urls by folderName
         const groupedUrls = {};
 
         for (const file of files) {
-            // console.log(file);
             const folderName = fileFolderMap[file.originalname];
             if (!folderName) {
                 console.warn(`Folder not found for file ${file.originalname}, skipping`);
@@ -47,7 +44,6 @@ s3Router.post("/upload-images", upload.array("images"), async (req, res) => {
                 fileName: file.originalname
             });
         }
-        // console.log(groupedUrls);
 
         return res.status(200).json({ groupedUrls });
     } catch (error) {

@@ -4,7 +4,6 @@ import cron from "node-cron";
 import ScheduledCaptures from "../models/ScheduledCapture";
 
 cron.schedule('0 * * * *', async () => { // Every hour at minute 0
-    console.log('Running scheduled capture job at', new Date());
 
     const now = new Date();
     const pendingCaptures = await ScheduledCaptures.find({ status: 'pending', captureDate: { $lte: now } });
@@ -24,7 +23,6 @@ cron.schedule('0 * * * *', async () => { // Every hour at minute 0
                 { status: 'captured', 'razorpay.capture.captureId': payment.id, 'razorpay.capture.capturedAt': new Date() }
             );
 
-            console.log(`Payment captured for booking ${sc.bookingId}`);
         } catch (err) {
             console.error(`Capture failed for booking ${sc.bookingId}:`, err);
             sc.status = 'failed';

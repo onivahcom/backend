@@ -36,7 +36,6 @@ export const createOrGetConversation = async (req, res) => {
 
         res.status(201).json({ conversation });
     } catch (error) {
-        console.log('Error creating/getting conversation:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };
@@ -100,7 +99,6 @@ export const getUserConversations = async (req, res) => {
 
         res.status(200).json({ conversations: populatedConversations });
     } catch (error) {
-        console.log('❌ Error fetching user conversations:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };

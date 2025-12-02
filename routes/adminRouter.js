@@ -98,7 +98,6 @@ adminRouter.get('/get/contacts', async (req, res) => {
 // admin inbox mark as read
 adminRouter.put('/contacts/:id/mark-read', async (req, res) => {
     const { id } = req.params;
-    console.log(id);
     try {
         const contact = await ContactForm.findByIdAndUpdate(
             id,
@@ -167,7 +166,7 @@ adminRouter.get('/get-file/:id', async (req, res) => {
         }
 
         // Construct relative path for frontend
-        const filePath = `https://backend.onivah.com/uploads/${service.file.storedName}`;
+        const filePath = `http://localhost:4000/uploads/${service.file.storedName}`;
 
         res.status(200).json({
             service,
@@ -322,7 +321,6 @@ adminRouter.post("/approve-service", verifyToken, authorize('view_approved_reque
     try {
 
         const { serviceId, adminId } = req.body; // ✅ extract from POST body
-        console.log(serviceId, adminId);
         const requestedService = await RequestedService.findById(serviceId);
         if (!requestedService) {
             return res.status(404).json({ message: "Requested service not found" });
@@ -419,7 +417,6 @@ adminRouter.post("/approve-service", verifyToken, authorize('view_approved_reque
         });
 
     } catch (error) {
-        console.log("Error approving service:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
@@ -491,7 +488,6 @@ const fetchApprovalLogs = async () => {
             .populate("adminId", "userName") // Only populate admin's userName
             .populate("approved.serviceId", "fullName email category additionalFields")
             .populate("declined.serviceId", "fullName email category declineReason");
-        console.log(logs);
         return logs;
     } catch (error) {
         console.error("❌ Error fetching approval logs:", error);
@@ -503,7 +499,6 @@ const fetchApprovalLogs = async () => {
 async function requestCounts() {
     try {
         const requestCount = await RequestedService.countDocuments();
-        console.log("Total requested services:", requestCount);
     } catch (error) {
         console.error("Error counting requested services:", error);
     }
@@ -529,7 +524,6 @@ async function deleteTodaysRequestedServices() {
             createdAt: { $gte: startOfDay, $lt: startOfNextDay },
         });
 
-        console.log(`Deleted ${deletedServices.deletedCount} requested services created today.`);
     } catch (error) {
         console.error("Error deleting today's requested services:", error);
     }
@@ -585,7 +579,6 @@ adminRouter.put("/decline-service/:id", verifyToken, authorize("view_declined_re
 //     try {
 //         await connectDB(); // Ensure the DB is connected
 //         const collections = await mongoose.connection.db.listCollections().toArray();
-//         console.log("All Collections in MongoDB:", collections.map(col => col.name));
 //     } catch (error) {
 //         console.error("Error fetching collections:", error);
 //     }
@@ -598,7 +591,6 @@ adminRouter.put("/decline-service/:id", verifyToken, authorize("view_declined_re
 //         await connectDB(); // Ensure the DB is connected
 //         const partyHallCollection = mongoose.connection.db.collection('convention_center');
 //         const documents = await partyHallCollection.find().toArray();
-//         console.log("Documents in party_hall collection:", documents);
 //     } catch (error) {
 //         console.error("Error fetching documents from party_hall:", error);
 //     }
@@ -655,7 +647,6 @@ adminRouter.delete("/delete-service/:id", async (req, res) => {
 adminRouter.post("/create-user", verifyToken, authorize('create_user'), async (req, res) => {
     try {
         const { userName, userPassword, role, permissions } = req.body;
-        console.log(userName, userPassword, role, permissions);
 
         // Check if already exists
         const existing = await AdminTable.findOne({ $or: [{ userName }] });
@@ -682,7 +673,6 @@ adminRouter.post("/create-user", verifyToken, authorize('create_user'), async (r
             user: { id: newUser._id, userName, role, permissions },
         });
     } catch (err) {
-        console.log("Error creating admin:", err);
         res.status(500).json({ message: "Server error" });
     }
 });
@@ -812,7 +802,6 @@ adminRouter.post("/pricing-config/update", async (req, res) => {
             config: newConfig,
         });
     } catch (err) {
-        console.log(err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -822,7 +811,6 @@ adminRouter.get("/search-recipient", async (req, res) => {
     try {
         const { type, search } = req.query;
 
-        console.log(type, search);
 
         if (!["vendor", "user"].includes(type)) {
             return res.status(400).json({ message: "Invalid type. Must be 'user' or 'vendor'." });
@@ -836,10 +824,8 @@ adminRouter.get("/search-recipient", async (req, res) => {
         } else if (type === "user") {
             results = await userTable.find({ firstname: regex }).limit(20).select("firstname lastname email city state country _id");
         }
-        console.log(results);
         res.json(results);
     } catch (err) {
-        console.log(err);
         res.status(500).json({ message: "Server error" });
     }
 });

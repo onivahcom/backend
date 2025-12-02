@@ -5,7 +5,6 @@ import UserVisitLogs from "../models/userVisitLogs.js";
 
 export const calculateVisitorTrend = async () => {
     try {
-        console.log("📊 [Visitor Trend Job] Started at", new Date().toLocaleString());
 
         const now = new Date();
         const startDate = new Date();
@@ -55,7 +54,6 @@ export const calculateVisitorTrend = async () => {
         ]);
 
         if (!logs.length) {
-            console.log(" No logs found for the last 3 days. Exiting cron.");
             return;
         }
 
@@ -88,10 +86,6 @@ export const calculateVisitorTrend = async () => {
                 visitorsAvg = (yCount + dbfCount) / 2;
                 trendPercent = ((yCount - dbfCount) / dbfCount) * 100;
             }
-
-            // console.log(`📈 Service: ${serviceId} (${category})`);
-            // console.log(`   Day Before: ${dbfCount}, Yesterday: ${yCount}`);
-            // console.log(`   → Avg: ${visitorsAvg.toFixed(1)} | Trend: ${trendPercent.toFixed(2)}%`);
 
             // 📝 Update respective service (enable when ready)
 
@@ -141,7 +135,6 @@ export const updateServiceTrend = async ({ category, serviceId, visitorsAvg, tre
         const collections = await mongoose.connection.db.listCollections().toArray();
         const exists = collections.some(col => col.name === collectionName);
         if (!exists) {
-            console.log(`⚠️ Collection '${collectionName}' does not exist. Skipping.`);
             return;
         }
 

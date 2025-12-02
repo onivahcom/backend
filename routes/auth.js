@@ -10,7 +10,6 @@ const tokenGen = express.Router();
 
 
 tokenGen.get("/refresh", async (req, res) => {
-    // console.log("🔄 Refresh endpoint triggered");
 
     const refreshToken = req.cookies.refreshToken;
     if (!refreshToken) return res.status(401).json({ message: "No refresh token" });
@@ -21,11 +20,9 @@ tokenGen.get("/refresh", async (req, res) => {
 
         const existing = await RefreshToken.findOne({ tokenId: payload.tokenId });
 
-        // console.log("📦 Found refresh token record:", existing);
 
         // 🛡 Reuse Detection
         if (!existing || !existing.valid || existing.expiresAt < now) {
-            // console.warn("⚠️ Detected token reuse or expiration");
 
             await RefreshToken.updateMany({ userId: payload.userId }, { valid: false });
             res.clearCookie("accessToken");
@@ -38,7 +35,6 @@ tokenGen.get("/refresh", async (req, res) => {
         const sameAgent = existing.userAgent === req.headers["user-agent"];
 
         if (!sameIP || !sameAgent) {
-            // console.warn("⚠️ Detected suspicious activity: IP/Agent mismatch");
 
             await RefreshToken.updateMany({ userId: payload.userId }, { valid: false });
             res.clearCookie("accessToken");
@@ -77,13 +73,11 @@ tokenGen.get("/refresh", async (req, res) => {
             path: "/",
         });
 
-        // console.log("✅ Set new access and refresh tokens");
 
         // 🕒 Gracefully expire old token shortly after
         setTimeout(async () => {
             try {
                 await RefreshToken.updateOne({ tokenId: payload.tokenId }, { valid: false });
-                // console.log(`⏳ Old refresh token (${payload.tokenId}) marked as invalid.`);
             } catch (e) {
                 // console.error("❌ Failed to invalidate old token:", e);
             }

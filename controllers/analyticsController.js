@@ -56,7 +56,6 @@ export const trackUserVisit = async (req, res) => {
                     existingVisit.uniqueDaysVisited += 1;
                 }
 
-                // console.log(`🆕 Started NEW session (after ${diffMinutes.toFixed(1)} min)`);
 
                 // 🧾 Log this new session into UserVisitLogs (raw log)
                 await UserVisitLogs.create({
@@ -69,14 +68,12 @@ export const trackUserVisit = async (req, res) => {
                     ipAddress,
                     visitDate: now,
                 });
-                // console.log("🧩 Logged new session entry in UserVisitLogs");
 
             } else {
                 // 🔄 Continuing existing session (and reopen if closed)
                 if (!existingVisit.sessionStartTime) {
                     existingVisit.sessionStartTime = now;
                     existingVisit.isActive = true;
-                    // console.log("♻️ Reopened previous session (was ended but within 10 min)");
                 } else {
                     // console.log(`🔄 Continuing active session (${diffMinutes.toFixed(1)} min since last)`);
                 }
@@ -120,7 +117,6 @@ export const trackUserVisit = async (req, res) => {
 
         await newVisit.save();
 
-        // console.log("🆕 New visitor/session created");
 
         // 🧾 Log this first visit too
         await UserVisitLogs.create({
@@ -133,7 +129,6 @@ export const trackUserVisit = async (req, res) => {
             ipAddress,
             visitDate: now,
         });
-        // console.log("🧩 Logged new visitor entry in UserVisitLogs");
 
         return res.status(201).json({
             message: "New visitor recorded",
@@ -173,7 +168,6 @@ export const endUserSession = async (req, res) => {
 
         //  Handle already ended sessions gracefully
         if (!analytics.sessionStartTime) {
-            // console.log(` Session already ended for token: ${sessionToken}`);
             return res.status(200).json({
                 message: "Session already ended",
                 totalTimeSpent: analytics.totalTimeSpent,
@@ -207,9 +201,6 @@ export const endUserSession = async (req, res) => {
             return `${mins}m ${rem}s`;
         };
 
-        // console.log(
-        //     ` Session ended for ${serviceId} | Duration: ${formatTime(duration)} | Total: ${formatTime(analytics.totalTimeSpent)} | Avg: ${formatTime(analytics.avgSessionDuration)}`
-        // );
         // 🧠 5️⃣ Respond with updated analytics (for dynamic pricing logic)
         return res.status(200).json({
             message: "Session ended successfully",

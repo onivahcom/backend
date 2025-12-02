@@ -34,14 +34,6 @@ const fetchPageVisits = async () => {
 
         const rows = res.data.rows || [];
 
-        console.log('📊 Page visit data:');
-        console.table(
-            rows.map(row => ({
-                page: row.dimensionValues[0].value,
-                country: row.dimensionValues[1].value,
-                views: row.metricValues[0].value,
-            }))
-        );
     } catch (error) {
         console.error('❌ Failed to fetch analytics data:', error.message);
     }

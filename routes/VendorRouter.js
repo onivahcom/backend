@@ -126,8 +126,6 @@ vendorRouter.get('/signup/verify/:token', (req, res) => {
         const decoded = jwt.verify(token, process.env.VENDOR_SECRET_KEY);
         const { email } = decoded;
 
-        console.log(`Token verified for email: ${email}`);
-
         // Delete the token from the in-memory store after successful verification
         delete verificationTokens[email];
 
@@ -323,7 +321,6 @@ const sendEmailOtp = async (email) => {
         console.log(`OTP sent to email: ${email, otp}`);
         return otp;  // Return the OTP for later verification
     } catch (error) {
-        console.error('Error sending email OTP:', error);
         throw error;
     }
 };
@@ -539,7 +536,6 @@ vendorRouter.get('/fetch/:email/images', vendorAuth, async (req, res) => {
                 }
             })
         );
-        // console.log(services);
         res.json({ success: true, services: services });
 
     } catch (err) {
@@ -568,7 +564,6 @@ vendorRouter.get("/category/:category/:serviceId", vendorAuth, async (req, res) 
         res.status(200).json({ ...service, feedbacks });
 
     } catch (error) {
-        console.log("Error fetching service by ID:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 });
@@ -934,8 +929,8 @@ vendorRouter.get("/pending-orders/count", vendorAuth, async (req, res) => {
         }
 
         const count = await Booking.countDocuments({
-            status: 'authorized',   // not equal to "pending"
-            hostId: vendorId,           // match vendor ID
+            status: { $in: ['authorized', 'requested', 'captured', 'confirmed'] },
+            hostId: vendorId, // cast string to ObjectId
         });
 
         res.json({ count });

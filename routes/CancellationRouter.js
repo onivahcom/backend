@@ -52,7 +52,6 @@ cancellationRouter.post("/cancel-order", async (req, res) => {
 
         if (booking.status === "authorized" || booking.status === "requested") {
             const payment = await razorpay.payments.fetch(booking.razorpayPaymentId);
-            console.log("Payment details before void:", payment);
 
             // Check if domestic card
             // const isDomesticCard = payment.method === "card" && !payment.international && !payment?.card?.emi;
@@ -70,9 +69,7 @@ cancellationRouter.post("/cancel-order", async (req, res) => {
             //                 }
             //             }
             //         );
-            //         console.log("Voided payment:", voidResult.data);
             //     } catch (err) {
-            //         console.log("Void failed:", err.response?.data || err.message);
             //         // optionally throw or continue depending on your flow
             //     }
             // }
@@ -220,7 +217,6 @@ cancellationRouter.get("/refund-preview/:bookingId", async (req, res) => {
 
         // 3. Calculate refund
         const refundAmount = calculateRefund(booking, policy);
-        console.log(refundAmount, policy);
         // 4. Return response
         res.json({
             success: true,

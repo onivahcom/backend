@@ -18,7 +18,6 @@ const googleLogin = async (req, res) => {
         const userRes = await axios.get(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${tokens.access_token}`);
         const { email, name, picture } = userRes.data;
 
-        console.log(userRes.data);
         return res.status(200).json({ message: "success", email, name, picture });
 
     } catch (error) {

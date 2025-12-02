@@ -64,8 +64,8 @@ dotenv.config(); // Load environment variables
 const app = express();
 const server = http.createServer(app);
 
-const SITE_URL = "https://onivah.com" || 'http://localhost:3001';   // your frontend URL
-const API_URL = "https://backend.onivah.com";   // your backend URL
+const SITE_URL = "http://localhost:3000";   // your frontend URL
+const API_URL = "http://localhost:4000";   // your backend URL
 
 
 const io = new Server(server, {
@@ -73,9 +73,8 @@ const io = new Server(server, {
     origin: [
       SITE_URL,
       API_URL,
-      "https://onivah.com",
       "https://www.onivah.com",
-      "https://backend.onivah.com",
+      "http://localhost:4000",
       "https://algos.onivah.com"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -134,18 +133,19 @@ io.on('connection', (socket) => {
 app.set('trust proxy', 1);
 
 const allowedOrigins = [
-  'https://onivah.com',
-  'https://www.onivah.com',
-  'https://backend.onivah.com',
-  'https://algos.onivah.com',
   SITE_URL,
   API_URL,
+  'https://www.onivah.com',
+  'http://localhost:4000',
+  'https://algos.onivah.com',
+
 ];
 
 const pythonapi = 'https://algos.onivah.com';
 
 const corsOptions = {
   origin: function (origin, callback) {
+    // console.log(origin, '*');
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -172,27 +172,27 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 
 
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
+// app.use(
+//   helmet({
+//     contentSecurityPolicy: {
+//       directives: {
+//         defaultSrc: ["'self'"],
 
-        connectSrc: [
-          "'self'",
-          SITE_URL,
-          API_URL,
-          // `ws://localhost:4000`,
-        ],
+//         connectSrc: [
+//           "'self'",
+//           SITE_URL,
+//           API_URL,
+//           // `ws://localhost:4000`,
+//         ],
 
-        frameAncestors: [
-          "'self'",
-          SITE_URL,
-        ],
-      },
-    },
-  })
-);
+//         frameAncestors: [
+//           "'self'",
+//           SITE_URL,
+//         ],
+//       },
+//     },
+//   })
+// );
 
 
 // Middleware to parse JSON bodies
@@ -1733,7 +1733,6 @@ app.get("/recommend/:serviceId", async (req, res) => {
 app.post("/calculate-dynamic-pricing", async (req, res) => {
   try {
     const price = await calculateDynamicPricing(req.body);
-    console.log(price);
     res.json({ success: true, price });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to calculate price" });
@@ -1822,7 +1821,6 @@ app.post("/generate/check-in-qr", async (req, res) => {
 
     res.json({ qrDataUrl });
   } catch (err) {
-    console.log(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -1856,7 +1854,6 @@ app.get("/scan/check-in-qr", async (req, res) => {
 
     res.json({ booking: safeBooking });
   } catch (err) {
-    console.log(err);
     res.status(401).json({ error: "Invalid or expired QR" });
   }
 });

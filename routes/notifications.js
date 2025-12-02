@@ -8,7 +8,6 @@ notificationRouter.get("/:type/:id", async (req, res) => {
     try {
         const { type, id } = req.params;
 
-        console.log(type, id);
         if (!["user", "vendor"].includes(type)) {
             return res.status(400).json({ message: "Invalid type. Must be 'user' or 'vendor'." });
         }
@@ -18,7 +17,6 @@ notificationRouter.get("/:type/:id", async (req, res) => {
 
         res.json({ success: true, notifications });
     } catch (error) {
-        console.log(error);
         res.status(500).json({ success: false, message: "Server error", error });
     }
 });
@@ -27,7 +25,6 @@ notificationRouter.get("/:type/:id", async (req, res) => {
 notificationRouter.post("/send-notification", async (req, res) => {
     try {
         const { type, userId, vendorId, title, content, url, sendBy, messageType } = req.body;
-        console.log(type, userId, vendorId, title, content, url, sendBy, messageType);
         // Validate type
         if (!["user", "vendor"].includes(type)) {
             return res.status(400).json({ message: "Invalid type. Must be 'user' or 'vendor'." });

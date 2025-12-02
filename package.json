@@ -41,7 +41,6 @@
     "multer-storage-cloudinary": "^4.0.0",
     "node-cron": "^3.0.2",
     "nodemailer": "^6.9.15",
-    "nodemon": "^3.0.1",
     "openai": "^5.12.2",
     "pdf-to-excel": "^0.3.2",
     "qrcode": "^1.5.4",
@@ -54,5 +53,8 @@
     "uniqid": "^5.4.0",
     "uuid": "^9.0.1",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
   }
 }
