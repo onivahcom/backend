@@ -29,7 +29,7 @@ export const getLocationBasedServices = async (req, res) => {
         if (!services.length) {
             return res.status(404).json({ message: 'No services available near your location.' });
         }
-
+        console.log(services);
         return res.json({ services });
     } catch (error) {
         console.error(error);

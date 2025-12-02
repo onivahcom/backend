@@ -64,12 +64,15 @@ dotenv.config(); // Load environment variables
 const app = express();
 const server = http.createServer(app);
 
+const SITE_URL = "https://onivah.com" || 'http://localhost:3001';   // your frontend URL
+const API_URL = "https://backend.onivah.com";   // your backend URL
+
+
 const io = new Server(server, {
   cors: {
     origin: [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:4000",
+      SITE_URL,
+      API_URL,
       "https://onivah.com",
       "https://www.onivah.com",
       "https://backend.onivah.com",
@@ -135,8 +138,8 @@ const allowedOrigins = [
   'https://www.onivah.com',
   'https://backend.onivah.com',
   'https://algos.onivah.com',
-  // 'http://localhost:3000',
-  // 'http://localhost:3001',
+  SITE_URL,
+  API_URL,
 ];
 
 const pythonapi = 'https://algos.onivah.com';
@@ -168,23 +171,29 @@ app.use((req, res, next) => {
 
 app.use(cookieParser());
 
-// Always use basic Helmet protections
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      connectSrc: [
-        "'self'",
-        "http://localhost:3000", // allow frontend React dev
-        "http://localhost:4000", // allow API backend
-        "ws://localhost:4000",   // allow Socket.IO websockets
-        "https://fphnc2kj-3000.inc1.devtunnels.ms",
-        "https://fphnc2kj-4000.inc1.devtunnels.ms",
-      ],
-      frameAncestors: ["'self'", 'http://localhost:3000', 'https://fphnc2kj-3000.inc1.devtunnels.ms'],
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+
+        connectSrc: [
+          "'self'",
+          SITE_URL,
+          API_URL,
+          // `ws://localhost:4000`,
+        ],
+
+        frameAncestors: [
+          "'self'",
+          SITE_URL,
+        ],
+      },
     },
-  },
-}));
+  })
+);
+
 
 // Middleware to parse JSON bodies
 app.use(express.json({ limit: "50mb" }));
@@ -193,10 +202,11 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use((req, res, next) => {
   res.setHeader(
     "Permissions-Policy",
-    'fullscreen=(self "http://localhost:3000" )'
+    `fullscreen=(self "${SITE_URL}")`
   );
   next();
 });
+
 
 app.use('/uploads', express.static('uploads'));
 
@@ -345,7 +355,7 @@ async function testImageChat() {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:3000", // Replace with your site
+        "HTTP-Referer": SITE_URL, // Replace with your site
         "X-Title": "My Test App",
         "Content-Type": "application/json",
       },
@@ -688,12 +698,12 @@ function sendEmail(email, otp) {
     };
     resolve({ success: true, message: `OTP sent to email: ${email}` });
 
-    // transporter.sendMail(mailOptions, (error, info) => {
-    //   if (error) {
-    //     return reject(new Error('Error sending email'));
-    //   }
-    //   resolve({ success: true, message: `OTP sent to email: ${email}` });
-    // });
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return reject(new Error('Error sending email'));
+      }
+      resolve({ success: true, message: `OTP sent to email: ${email}` });
+    });
   });
 }
 
@@ -1723,7 +1733,7 @@ app.get("/recommend/:serviceId", async (req, res) => {
 app.post("/calculate-dynamic-pricing", async (req, res) => {
   try {
     const price = await calculateDynamicPricing(req.body);
-
+    console.log(price);
     res.json({ success: true, price });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to calculate price" });
@@ -1803,7 +1813,7 @@ app.post("/generate/check-in-qr", async (req, res) => {
 
     // Generate QR code as data URL
     const qrDataUrl = await QRCode.toDataURL(
-      `http://localhost:3000/scan-booking?token=${token}`
+      `${SITE_URL}/scan-booking?token=${token}`
     );
 
     // Save token in DB (optional: for single-use tracking)
