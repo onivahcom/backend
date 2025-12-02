@@ -44,26 +44,26 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
+            mkdir -p /var/www/backend
             cd /var/www/backend
 
-            # Clone repo if folder has no git (first deployment)
+            # Clone repo if missing
             if [ ! -d ".git" ]; then
-              git clone https://github.com/onivahcom/backend.git .
+              git clone git@github.com:onivahcom/backend.git .
             fi
 
-            # Sync with latest main branch
+            # Pull latest code
             git fetch origin main
             git reset --hard origin/main
 
             # Install dependencies
             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-            # Start backend if not running, else restart
-            pm2 describe backend > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
+            # Restart / Start backend
+            if pm2 describe backend > /dev/null; then
               pm2 restart backend
             else
-              pm2 start npm --name backend -- start
+              pm2 start npm --name backend -- run start
             fi
 
             pm2 save

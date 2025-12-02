@@ -64,8 +64,8 @@ dotenv.config(); // Load environment variables
 const app = express();
 const server = http.createServer(app);
 
-const SITE_URL = "http://localhost:3000";   // your frontend URL
-const API_URL = "http://localhost:4000";   // your backend URL
+const SITE_URL = "https://onivah.com";   // your frontend URL
+const API_URL = "https://backend.onivah.com";   // your backend URL
 
 
 const io = new Server(server, {
@@ -74,7 +74,7 @@ const io = new Server(server, {
       SITE_URL,
       API_URL,
       "https://www.onivah.com",
-      "http://localhost:4000",
+      "https://backend.onivah.com",
       "https://algos.onivah.com"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -136,7 +136,7 @@ const allowedOrigins = [
   SITE_URL,
   API_URL,
   'https://www.onivah.com',
-  'http://localhost:4000',
+  'https://backend.onivah.com',
   'https://algos.onivah.com',
 
 ];
