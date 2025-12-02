@@ -16,14 +16,19 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_PRIVATE_KEY }}
-        script: |
+        # script: |
+        #   cd /var/www/backend
+        #   git pull origin main
+        #   npm ci --legacy-peer-deps
+        #   pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
+        #   pm2 restart backend
+        #   pm2 save
+
+  script: |
           cd /var/www/backend
           git reset --hard origin/main
           git pull origin main
           npm ci --legacy-peer-deps
-          pm2 delete backend || true
-          pm2 start server.js --name backend
-
-          # pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
-          # pm2 restart backend
+          pm2 describe backend > /dev/null || pm2 start npm --name backend -- start
+          pm2 restart backend
           pm2 save
