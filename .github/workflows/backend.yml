@@ -44,22 +44,31 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
-            # Ensure backend directory exists
-            mkdir -p /var/www/backend
+    
             cd /var/www/backend
 
-            # Stop and delete PM2 process
-            pm2 delete backend || true
-            pm2 kill || true
+            # Clone repo if first time
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/onivahcom/backend.git .
+            fi
 
-            # Clean old files (careful: deletes untracked files)
             git fetch origin main
             git reset --hard origin/main
-            git clean -fd
 
-            # Install dependencies fresh
+            # Install dependencies
             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-            # Start backend safely
-            pm2 start server.js --name backend
+            # Ensure PM2 is installed globally
+            if ! command -v pm2 &> /dev/null; then
+              npm install -g pm2
+            fi
+
+            # Restart or start backend with PM2
+            pm2 describe gbr-backend > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              pm2 restart backend
+            else
+              pm2 start server.js --name backend
+            fi
+
             pm2 save
