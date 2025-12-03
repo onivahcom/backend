@@ -2,7 +2,7 @@ import UserVisitAnalytics from "../models/UserVisitAnalytics.js";
 import mongoose from "mongoose";
 import crypto from "crypto";
 import RequestedService from "../models/RequestedService.js";
-import UserVisitLogs from "../models/userVisitLogs.js";
+import UserVisitLogs from "../models/UserVisitLogs.js";
 
 
 export const trackUserVisit = async (req, res) => {

@@ -44,22 +44,23 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
           script: |
+            # Ensure backend directory exists
             mkdir -p /var/www/backend
             cd /var/www/backend
 
-            # Clone repo if missing
+            # Clone repo if it's not already a git repo
             if [ ! -d ".git" ]; then
               git clone git@github.com:onivahcom/backend.git .
             fi
 
-            # Pull latest code
+            # Always pull latest
             git fetch origin main
             git reset --hard origin/main
 
-            # Install dependencies
+            # Install dependencies cleanly
             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-            # Restart backend safely
+            # Restart with PM2 safely
             pm2 delete backend || true
-            pm2 start npm --name backend -- run start
+            pm2 start server.js --name backend
             pm2 save
