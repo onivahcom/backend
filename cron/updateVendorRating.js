@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import cron from "node-cron";
 import VendorsTable from "../models/VendorTable.js";
-import RequestedService from "../models/RequestedService.js";
+import RequestedService from "../models/requestedService.js";
 import Vendor from "../models/vendors.js";
 import Feedback from "../models/Feedback.js"; //  Import feedback model
 

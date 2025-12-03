@@ -13,7 +13,7 @@ import ContactForm from './models/contactForm.js'
 import vendorRouter from "./routes/VendorRouter.js";
 import twilio from 'twilio'; // Use ES6 import
 import adminRouter from "./routes/adminRouter.js";
-import RequestedService from "./models/RequestedService.js";
+import RequestedService from "./models/requestedService.js";
 import multer from "multer";
 import AdminTable from "./models/adminTable.js";
 import bcrypt from "bcrypt";

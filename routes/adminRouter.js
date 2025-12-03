@@ -3,7 +3,7 @@ import nodemailer from "nodemailer"
 import Vendor from "../models/vendors.js";
 import jwt from "jsonwebtoken";
 import ContactForm from "../models/contactForm.js";
-import RequestedService from "../models/RequestedService.js";
+import RequestedService from "../models/requestedService.js";
 import userTable from "../models/userTable.js";
 import VendorsTable from "../models/VendorTable.js";
 import AdminTable from "../models/adminTable.js";

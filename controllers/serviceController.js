@@ -1,4 +1,4 @@
-import RequestedService from "../models/RequestedService.js";
+import RequestedService from "../models/requestedService.js";
 
 export const getLocationBasedServices = async (req, res) => {
     const { nearbyCounties = [], stateDistrict, page } = req.body;

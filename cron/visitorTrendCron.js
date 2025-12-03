@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import mongoose from "mongoose";
-import UserVisitLogs from "../models/UserVisitLogs.js";
+import UserVisitLogs from "../models/userVisitLogs.js";
 
 
 export const calculateVisitorTrend = async () => {

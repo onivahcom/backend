@@ -8,7 +8,7 @@ import multer from "multer";
 import fs from 'fs'
 import twilio from 'twilio'; // Use ES6 import
 import bcrypt from 'bcrypt'; // To hash the password
-import RequestedService from "../models/RequestedService.js";
+import RequestedService from "../models/requestedService.js";
 import mongoose from "mongoose";
 import Feedback from "../models/Feedback.js";
 import Message from "../models/Message.js";
