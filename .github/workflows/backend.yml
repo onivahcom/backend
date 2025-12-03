@@ -48,19 +48,18 @@ jobs:
             mkdir -p /var/www/backend
             cd /var/www/backend
 
-            # Clone repo if it's not already a git repo
-            if [ ! -d ".git" ]; then
-              git clone git@github.com:onivahcom/backend.git .
-            fi
+            # Stop and delete PM2 process
+            pm2 delete backend || true
+            pm2 kill || true
 
-            # Always pull latest
+            # Clean old files (careful: deletes untracked files)
             git fetch origin main
             git reset --hard origin/main
+            git clean -fd
 
-            # Install dependencies cleanly
+            # Install dependencies fresh
             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-            # Restart with PM2 safely
-            pm2 delete backend || true
+            # Start backend safely
             pm2 start server.js --name backend
             pm2 save
