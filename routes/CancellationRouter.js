@@ -111,8 +111,8 @@ cancellationRouter.post("/cancel-order", async (req, res) => {
             );
         }
 
-        // FREE BOOKED DATES IF USER CANCELS
-        if (!isVendor) {
+        // FREE BOOKED DATES IF USER || VENDOR CANCELS BEFORE AMOUNT CAPTURE
+        if (!isVendor || isVendor && (booking.status !== "captured" || booking.status !== "confirmed" && refundAmount === 0)) {
             const serviceCollection = mongoose.connection.collection(booking.category);
 
             // Format dates as "YYYY-MM-DD" strings to match DB

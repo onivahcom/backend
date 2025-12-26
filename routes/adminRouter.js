@@ -166,7 +166,7 @@ adminRouter.get('/get-file/:id', async (req, res) => {
         }
 
         // Construct relative path for frontend
-        const filePath = `https://backend.onivah.com/uploads/${service.file.storedName}`;
+        const filePath = `https://backend.globalbizreport.com/uploads/${service.file.storedName}`;
 
         res.status(200).json({
             service,
@@ -198,7 +198,7 @@ adminRouter.get('/declined-services', verifyToken, authorize('view_declined_requ
             .populate('vendorId', 'firstName profilePic _id');
         res.status(200).json(declinedServices);
     } catch (error) {
-        console.error('Error fetching declined services:', error);
+        console.log('Error fetching declined services:', error);
         res.status(500).json({ message: 'Failed to fetch data.' });
     }
 });
@@ -351,6 +351,7 @@ adminRouter.post("/approve-service", verifyToken, authorize('view_approved_reque
             fullName,
             email,
             category,
+            serviceVisibility: true,
             additionalFields: { ...otherFields, businessName },
             images,
         });
@@ -358,6 +359,7 @@ adminRouter.post("/approve-service", verifyToken, authorize('view_approved_reque
 
         await RequestedService.findByIdAndUpdate(serviceId, {
             isApproved: true,
+            serviceVisibility: true,
             linkedServiceId: newService._id,
         });
 
@@ -549,7 +551,7 @@ adminRouter.put("/decline-service/:id", verifyToken, authorize("view_declined_re
         await service.save();
 
         // Update ApprovalLog
-        await ApprovalLog.findOneAndUpdate(
+        const result = await ApprovalLog.findOneAndUpdate(
             { adminId },
             {
                 $push: {
@@ -565,12 +567,10 @@ adminRouter.put("/decline-service/:id", verifyToken, authorize("view_declined_re
             },
             { upsert: true, new: true }
         );
-
-        res
-            .status(200)
-            .json({ message: "Service request declined and logged successfully." });
+        console.log(result);
+        res.status(200).json({ message: "Service request declined and logged successfully." });
     } catch (error) {
-        console.error("Error declining service request:", error);
+        console.log("Error declining service request:", error);
         res.status(500).json({ message: "Failed to decline request." });
     }
 }

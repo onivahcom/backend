@@ -21,13 +21,18 @@ const requestedServiceSchema = new mongoose.Schema(
             resourceType: { type: String },
             secureUrl: { type: String },
         },
+        serviceVisibility: {
+            type: String,
+            enum: ["active", "inactive", "busy"],
+            default: "offline",
+        },
         isApproved: { type: Boolean, default: false }, // True if approved, false otherwise
         declined: { type: Boolean, default: false }, // True if declined
         declineReason: { type: String, default: null }, // Reason for decline (if declined)
         linkedServiceId: { type: mongoose.Schema.Types.ObjectId, default: null },
         vendorId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'vendor',
+            ref: 'Vendor',
             required: true,
         },
         termsandconditions: {
@@ -43,7 +48,7 @@ const requestedServiceSchema = new mongoose.Schema(
         paymentPreference: {
             type: String,
             enum: ["immediate", "delayed", "scheduled"],
-            default: "moderate",
+            default: "delayed",
             required: true,
         },
 

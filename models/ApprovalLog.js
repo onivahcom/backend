@@ -18,7 +18,7 @@ const approvalLogSchema = new mongoose.Schema({
             },
             serviceOwner: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: 'vendor', // Reference to the requested service
+                ref: 'Vendor', // Reference to the requested service
                 required: true,
             },
         },
@@ -34,7 +34,7 @@ const approvalLogSchema = new mongoose.Schema({
             },
             serviceOwner: {
                 type: mongoose.Schema.Types.ObjectId,
-                ref: 'vendor', // Reference to the requested service
+                ref: 'Vendor', // Reference to the requested service
                 required: true,
             },
             declineReason: { type: String, required: true },

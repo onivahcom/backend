@@ -14,6 +14,8 @@ import Feedback from "../models/Feedback.js";
 import Message from "../models/Message.js";
 import Booking from "../models/bookingSchema.js";
 import { ServicePricingConfig } from "../models/ServicePricingConfig.js";
+import ServiceAvailability from "../models/serviceAvailability.js";
+import Conversation from "../models/Conversation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -226,7 +228,7 @@ vendorRouter.post('/set-password', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create new user
-        const newUser = new vendor({
+        const newUser = new Vendor({
             email,
             phone,
             password: hashedPassword,
@@ -729,13 +731,13 @@ vendorRouter.put('/update-pricings', vendorAuth, async (req, res) => {
             return res.status(400).json({ error: 'Category missing in service document' });
         }
 
-        const whyusArray = Array.isArray(pricings) ? pricings : [pricings];
+        const updatedPricings = Array.isArray(pricings) ? pricings : [pricings];
 
 
         // 2. Update the RequestedService customPricing
         const requestedUpdate = await RequestedService.updateOne(
             { linkedServiceId: serviceId },
-            { $set: { 'additionalFields.customPricing': whyusArray } },
+            { $set: { 'additionalFields.customPricing': updatedPricings } },
             { new: true }
         );
 
@@ -743,7 +745,7 @@ vendorRouter.put('/update-pricings', vendorAuth, async (req, res) => {
         const collection = mongoose.connection.db.collection(category);
         const dynamicUpdate = await collection.updateOne(
             { _id: new mongoose.Types.ObjectId(serviceId) },
-            { $set: { 'additionalFields.customPricing': whyusArray } },
+            { $set: { 'additionalFields.customPricing': updatedPricings } },
             { new: true } // returns the updated document
         );
 
@@ -889,19 +891,37 @@ vendorRouter.post('/update-folder-name', vendorAuth, async (req, res) => {
 });
 
 // unseen message count of vendor
-vendorRouter.get('/unseen-count/:id', vendorAuth, async (req, res) => {
+vendorRouter.get("/unseen-count/:vendorId", vendorAuth, async (req, res) => {
     try {
-        const userId = req.params.id;
+        const vendorId = new mongoose.Types.ObjectId(req.params.vendorId);
 
+        // 1️⃣ Find all conversations for this vendor
+        const conversations = await Conversation.find(
+            { vendorId },
+            { _id: 1 }
+        );
+
+        if (!conversations.length) {
+            return res.json({ unseenCount: 0 });
+        }
+
+        const conversationIds = conversations.map(c => c._id);
+
+        // 2️⃣ Count unseen messages in those conversations
         const unseenCount = await Message.countDocuments({
-            seenBy: { $ne: userId }
+            conversationId: { $in: conversationIds },
+            senderType: "user", // only messages sent BY USER
+            seenBy: { $ne: vendorId }
         });
+
         res.json({ unseenCount });
+
     } catch (err) {
         console.error("Error counting unseen messages:", err);
         res.status(500).json({ message: "Server Error" });
     }
 });
+
 
 vendorRouter.get("/orders/count", vendorAuth, async (req, res) => {
     try {
@@ -941,7 +961,7 @@ vendorRouter.get("/pending-orders/count", vendorAuth, async (req, res) => {
 
 
 // show services of the vendor, based on their email
-vendorRouter.get("/manage-dates", async (req, res) => {
+vendorRouter.get("/manage-dates", vendorAuth, async (req, res) => {
     try {
         const { email } = req.query;
 
@@ -994,79 +1014,117 @@ vendorRouter.get("/manage-dates", async (req, res) => {
 });
 
 // manage availability by vendor
-vendorRouter.put("/update-category-dates", async (req, res) => {
+
+vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
     try {
-        const { category, businessName, dates, email } = req.body;
+        const { category, businessName, email, updates } = req.body;
 
-        if (!category || !businessName || !email || !dates || typeof dates !== "object") {
-
+        // 🔒 Validation
+        if (
+            !category ||
+            !businessName ||
+            !email ||
+            !Array.isArray(updates) ||
+            updates.length === 0
+        ) {
             return res.status(400).json({ error: "Invalid request data." });
         }
 
-        // Get the collection dynamically
         const db = mongoose.connection.db;
         const categoryCollection = db.collection(category);
 
-        // Find the document
         const existingCategory = await categoryCollection.findOne({
             "additionalFields.businessName": businessName,
-            email: email
+            email,
         });
 
         if (!existingCategory) {
             return res.status(404).json({ error: "Category not found" });
         }
 
-        // Get existing dates
-        let existingDates = existingCategory.dates || { booked: [], waiting: [], available: [] };
-        // Normalize to avoid null/undefined
+        // 🔹 Helpers
+        const normalizeDate = (d) => d?.toString().split("T")[0];
 
-        existingDates = {
-            booked: existingDates.booked || [],
-            waiting: existingDates.waiting || [],
-            available: existingDates.available || [],
+        const sanitize = (arr = []) =>
+            Array.isArray(arr)
+                ? arr
+                    .map((i) =>
+                        i?.date
+                            ? {
+                                date: normalizeDate(i.date),
+                                title: i.title || "",
+                                description: i.description || "",
+                                status: (i.status || "").toLowerCase(),
+                            }
+                            : null
+                    )
+                    .filter(Boolean)
+                : [];
+
+        // 🔹 Load existing dates safely
+        const dates = existingCategory.dates || {};
+
+        const normalizedDates = {
+            booked: sanitize(dates.booked),
+            available: sanitize(dates.available),
+            waiting: sanitize(dates.waiting),
+            others: sanitize(dates.others),
         };
 
-        const normalize = d => d.split('T')[0]; // keep YYYY-MM-DD only
+        // 🔥 PROCESS DELTA UPDATES
+        updates.forEach((update) => {
+            const status = update.status?.toLowerCase();
+            const date = normalizeDate(update.date);
 
-        const removeFromAllCategories = (date) => {
-            existingDates.booked = existingDates.booked.filter(d => normalize(d) !== normalize(date));
-            existingDates.waiting = existingDates.waiting.filter(d => normalize(d) !== normalize(date));
-            existingDates.available = existingDates.available.filter(d => normalize(d) !== normalize(date));
-        };
+            if (!date || !status) return;
 
-        // Update dates with new incoming ones
-        Object.entries(dates).forEach(([status, dateList]) => {
-            dateList.forEach(date => {
-                removeFromAllCategories(date); // ✅ remove from anywhere else
-                if (!existingDates[status].includes(date)) {
-                    existingDates[status].push(date); // ✅ add to correct status
-                }
-            });
+            const cleanItem = {
+                date,
+                title: update.title || status,
+                description: update.description || "",
+                status,
+            };
+
+            // 🔹 PRIMARY STATUSES → REPLACE
+            if (["booked", "available", "waiting"].includes(status)) {
+                // ❌ remove date from all primary statuses
+                ["booked", "available", "waiting"].forEach((key) => {
+                    normalizedDates[key] = normalizedDates[key].filter(
+                        (d) => d.date !== date
+                    );
+                });
+
+                // ✅ insert into correct primary status
+                normalizedDates[status].push(cleanItem);
+            }
+
+            // 🔹 OTHERS → APPEND (no replacement)
+            else if (status === "others") {
+                normalizedDates.others.push(cleanItem);
+            }
         });
 
-        // Remove duplicates
-        existingDates.booked = [...new Set(existingDates.booked)];
-        existingDates.waiting = [...new Set(existingDates.waiting)];
-        existingDates.available = [...new Set(existingDates.available)];
-
-        // Update the document
-        const updatedCategory = await categoryCollection.findOneAndUpdate(
-            { "additionalFields.businessName": businessName, email: email },
-            { $set: { dates: existingDates } }, // Save the cleaned-up dates
-            { returnDocument: "after" }
+        // 🔹 Save
+        await categoryCollection.updateOne(
+            {
+                "additionalFields.businessName": businessName,
+                email,
+            },
+            { $set: { dates: normalizedDates } }
         );
 
-        res.status(200).json({ message: "Dates updated successfully", updatedCategory });
-
+        return res.status(200).json({
+            message: "Dates updated successfully",
+            dates: normalizedDates,
+        });
     } catch (error) {
         console.error("Error updating category dates:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        return res.status(500).json({ error: "Internal Server Error" });
     }
 });
 
 
-vendorRouter.get("/service-bookings", async (req, res) => {
+vendorRouter.get("/service-bookings", vendorAuth, async (req, res) => {
     try {
         const { category, serviceId } = req.query;
 
@@ -1081,6 +1139,7 @@ vendorRouter.get("/service-bookings", async (req, res) => {
         })
             .populate("userId", "firstname email") // user details
             .sort({ "package.dates": 1 });
+
 
         // Format response with required fields
         const formattedBookings = bookings.map(b => ({
@@ -1112,6 +1171,7 @@ vendorRouter.get("/service-bookings", async (req, res) => {
             // createdAt: b.createdAt,
         }));
 
+
         res.status(200).json(formattedBookings);
     } catch (err) {
         console.error(err);
@@ -1120,7 +1180,7 @@ vendorRouter.get("/service-bookings", async (req, res) => {
 });
 
 // show services of the vendor, based on their email
-vendorRouter.get("/get-vendor-services", async (req, res) => {
+vendorRouter.get("/get-vendor-services", vendorAuth, async (req, res) => {
     try {
         const { email } = req.query;
 
@@ -1174,7 +1234,7 @@ vendorRouter.get("/get-vendor-services", async (req, res) => {
 
 
 //  Get pricing config for a specific service
-vendorRouter.get("/pricing-config/:serviceId", async (req, res) => {
+vendorRouter.get("/pricing-config/:serviceId", vendorAuth, async (req, res) => {
     try {
         const { serviceId } = req.params;
 
@@ -1192,7 +1252,7 @@ vendorRouter.get("/pricing-config/:serviceId", async (req, res) => {
 
 
 //  Always insert a new pricing config (no overwrite)
-vendorRouter.post("/pricing-config/update", async (req, res) => {
+vendorRouter.post("/pricing-config/update", vendorAuth, async (req, res) => {
     try {
         const { serviceId, category, peakDays, peakMonths, specialDates, highDemandLocations } = req.body;
 
@@ -1214,6 +1274,105 @@ vendorRouter.post("/pricing-config/update", async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+vendorRouter.get("/scan/check-in-qr", vendorAuth, async (req, res) => {
+    try {
+        const { token } = req.query;
+        if (!token) return res.status(400).json({ error: "Missing token" });
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+        const booking = await Booking.findById(decoded.bookingId)
+            .populate("userId", "firstname lastname profilePic _id email") // populate user name/email only
+
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+
+        // 🚫 Vendor authorization check
+        if (booking.hostId.toString() !== decoded.hostId) {
+            return res.status(403).json({
+                error: "You are not authorized to check in this booking",
+            });
+        }
+
+        // Prepare safe payload for frontend
+        const safeBooking = {
+            _id: booking._id,
+            status: booking.status,
+            amount: booking.amount,
+            razorpayPaymentId: booking.razorpayPaymentId,
+            serviceName: booking.serviceName,
+            category: booking.category,
+            serviceId: booking.serviceId,
+            package: booking.package, // title, description, amount, dates, additionalRequest
+            cancellation: booking.cancellation,
+            user: booking.userId, // populated
+            host: booking.hostId, // optional populated vendor info
+            createdAt: booking.createdAt,
+        };
+
+        res.json({ booking: safeBooking });
+    } catch (err) {
+        res.status(401).json({ error: "Invalid or expired QR" });
+    }
+});
+
+
+vendorRouter.post("/service-availability", vendorAuth, async (req, res) => {
+    try {
+        const { category, serviceId, vendorId, visibility } = req.body;
+
+        // ✅ Validate required fields
+        if (!category || !serviceId || !vendorId || !visibility) {
+            return res.status(400).json({ message: "Missing required fields" });
+        }
+
+        // ✅ Create ServiceAvailability record
+        await ServiceAvailability.create({
+            vendorId,
+            serviceId,
+            category,
+            status: visibility, // "active" | "inactive" | "busy"
+            offlineFrom: visibility !== "active" ? new Date() : null,
+            offlineTo: null,
+            updatedBy: "vendor",
+        });
+
+        const categoryCollection = mongoose.connection.collection(category);
+        const serviceObjectId = new mongoose.Types.ObjectId(serviceId);
+
+        // ✅ Await the result
+        const result = await categoryCollection.findOne({ _id: serviceObjectId });
+
+        if (!result) {
+            return res.status(404).json({ message: "Services not found" });
+        }
+
+        const updatedServiceDoc = await categoryCollection.findOneAndUpdate(
+            { _id: serviceObjectId },
+            {
+                $set: {
+                    serviceVisibility: visibility,
+                    updatedAt: new Date()
+                }
+            },
+            { returnDocument: "after" }
+        );
+
+        // ✅ Update RequestedService collection
+        const updateRequestedService = await RequestedService.findOneAndUpdate(
+            { linkedServiceId: serviceObjectId },
+            { $set: { serviceVisibility: visibility, updatedAt: new Date() } },
+            { new: true } // Mongoose option
+        );
+
+        if (!updatedServiceDoc) {
+            return res.status(404).json({ message: "Servicess not found" });
+        }
+
+        res.json({ success: true, visibility: updatedServiceDoc.value });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 

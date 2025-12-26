@@ -2,7 +2,6 @@ import RequestedService from "../models/requestedService.js";
 
 export const getLocationBasedServices = async (req, res) => {
     const { nearbyCounties = [], stateDistrict, page } = req.body;
-
     try {
         let services = [];
         const isLocationServices = page === "LOCATION_SERVICES";

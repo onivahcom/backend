@@ -327,28 +327,35 @@ paymentRouter.post('/booking/:id/approve', async (req, res) => {
                     .findOne({ _id: new mongoose.Types.ObjectId(serviceId) });
 
                 if (service) {
-                    const serviceDates = service.dates || { booked: [], waiting: [], available: [] };
-
-                    // Remove duplicates and normalize
-                    const bookedSet = new Set(serviceDates.booked.map(d => new Date(d).toISOString().split("T")[0]));
-                    dates.forEach(d => bookedSet.add(d));
-                    const updatedBooked = Array.from(bookedSet);
-
-                    const normalizeArray = (arr) => arr.map(d => new Date(d).toISOString().split("T")[0]);
+                    const bookedDateObjects = dates.map((d) => ({
+                        date: d,
+                        title: "Booked By Customer",
+                        description: "This is a system generated notification, based on your approval for this order",
+                        status: "Booked",
+                    }));
 
                     await mongoose.connection.db
                         .collection(category)
                         .updateOne(
-                            { _id: new mongoose.Types.ObjectId(serviceId) },
                             {
-                                $set: { "dates.booked": updatedBooked },
+                                _id: new mongoose.Types.ObjectId(serviceId),
+                                "dates.booked.date": { $nin: dates } // ⛔ prevent duplicates
+                            },
+                            {
+                                // ✅ Add booked objects
+                                $addToSet: {
+                                    "dates.booked": { $each: bookedDateObjects }
+                                },
+
+                                // ✅ Remove from waiting & available
                                 $pull: {
-                                    "dates.waiting": { $in: dates },
-                                    "dates.available": { $in: dates }
+                                    "dates.waiting": { date: { $in: dates } },
+                                    "dates.available": { date: { $in: dates } }
                                 }
                             }
                         );
                 }
+
             }
         }
 
@@ -358,6 +365,7 @@ paymentRouter.post('/booking/:id/approve', async (req, res) => {
             captured
         });
     } catch (err) {
+        console.log(err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

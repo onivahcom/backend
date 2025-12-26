@@ -58,14 +58,16 @@ import cancellationRouter from "./routes/CancellationRouter.js";
 import { calculateCheckoutPricing } from "./utils/CalculateCheckoutPricing.js";
 import paymentAnalyticsRouter from "./routes/PaymentAnalytics.js";
 import QRCode from "qrcode";
+import Transactions from "./models/Transactions.js";
+import vendorPricings from "./routes/vendorPricings.js";
 
 dotenv.config(); // Load environment variables
 
 const app = express();
 const server = http.createServer(app);
 
-const SITE_URL = "https://onivah.com";   // your frontend URL
-const API_URL = "https://backend.onivah.com";   // your backend URL
+const SITE_URL = "https://www.onivah.com";   // your frontend URL
+const API_URL = "https://backend.globalbizreport.com";   // your backend URL
 
 
 const io = new Server(server, {
@@ -74,7 +76,7 @@ const io = new Server(server, {
       SITE_URL,
       API_URL,
       "https://www.onivah.com",
-      "https://backend.onivah.com",
+      "https://backend.globalbizreport.com",
       "https://algos.onivah.com"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -136,7 +138,7 @@ const allowedOrigins = [
   SITE_URL,
   API_URL,
   'https://www.onivah.com',
-  'https://backend.onivah.com',
+  'https://backend.globalbizreport.com',
   'https://algos.onivah.com',
 
 ];
@@ -306,10 +308,11 @@ app.use('/api/payments', paymentRouter);
 app.use('/api/services', locationServiceRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/feedback", feedbackRouter);
-app.use("/api/cancellations", authenticateToken, cancellationRouter); // GET /api/feedback/:serviceId
+app.use("/api/cancellations", authenticateToken, cancellationRouter);
 app.use("/api/payment/analytics", paymentAnalyticsRouter);
+app.use("/api/vendor/pricings", vendorPricings);
 
-app.get("/api/feedback/:serviceId", getFeedbackByService); // GET /api/feedback/:serviceId
+app.get("/api/feedback/:serviceId", getFeedbackByService);
 
 // app.get("/pdf/signed-url/:publicId", getSignedPdfUrl);
 
@@ -383,8 +386,58 @@ async function testImageChat() {
 
 // backend inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully.*.");
+  res.status(200).send("Backend connected successfully.***.");
 });
+
+
+// Helper: get lat/lon for an address using Nominatim (OpenStreetMap)
+// async function geocodeAddress(address) {
+//   try {
+//     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`);
+//     const data = await res.json();
+//     if (!data || data.length === 0) return null;
+//     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+//   } catch (err) {
+//     console.error("Geocode error:", err);
+//     return null;
+//   }
+// }
+
+async function geocodeAddress(address, city) {
+  const queries = [
+    address,
+    city,
+    `${city}, Tamil Nadu`,
+    "Tamil Nadu, India"
+  ];
+
+  for (const q of queries) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&q=${encodeURIComponent(q)}`,
+        {
+          headers: {
+            "User-Agent": "Shubadinam/1.0 (contact@yourdomain.com)"
+          }
+        }
+      );
+
+      const data = await res.json();
+
+      if (Array.isArray(data) && data.length > 0) {
+        return {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+          resolvedFrom: q
+        };
+      }
+    } catch (err) {
+      console.error("Geocode error:", err);
+    }
+  }
+
+  return null;
+}
 
 
 
@@ -444,7 +497,10 @@ app.post("/admin-login", async (req, res) => {
   }
 });
 
-// fetch services dynamically based on category
+
+
+
+// // fetch services dynamically based on category
 app.get("/services/:category", async (req, res) => {
   try {
     let { category } = req.params;
@@ -453,24 +509,19 @@ app.get("/services/:category", async (req, res) => {
     page = parseInt(page);
     limit = parseInt(limit);
 
-    // Fetch documents directly from the collection
-    const services = await mongoose.connection.db
-      .collection(category)
-      .find()
+    const collection = mongoose.connection.db.collection(category);
+
+    const total = await collection.countDocuments();
+
+    const services = await collection
+      .find({})
+      .skip((page - 1) * limit)
+      .limit(limit)
       .toArray();
-
-    if (!services.length) {
-      return res.status(404).json({ message: `No services found in ${category}` });
-    }
-
-    const total = services.length;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    const paginated = services.slice(start, end);
 
     return res.status(200).json({
       success: true,
-      service: paginated,
+      service: services,
       pagination: {
         total,
         page,
@@ -478,10 +529,51 @@ app.get("/services/:category", async (req, res) => {
         totalPages: Math.ceil(total / limit),
       },
     });
+
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
+
+
+// app.get("/services/:category", async (req, res) => {
+//   try {
+//     let { category } = req.params;
+//     let { page = 1, limit = 20 } = req.query;
+
+//     page = parseInt(page);
+//     limit = parseInt(limit);
+
+//     // Fetch documents directly from the collection
+//     const services = await mongoose.connection.db
+//       .collection(category)
+//       .find()
+//       .toArray();
+
+//     if (!services.length) {
+//       return res.status(404).json({ message: `No services found in ${category}` });
+//     }
+
+//     const total = services.length;
+//     const start = (page - 1) * limit;
+//     const end = start + limit;
+//     const paginated = services.slice(start, end);
+
+//     return res.status(200).json({
+//       success: true,
+//       service: paginated,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         totalPages: Math.ceil(total / limit),
+//       },
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// });
 
 // fetch service based on particular id
 app.get("/category/:category/:serviceId", async (req, res) => {
@@ -524,62 +616,73 @@ app.get("/category/:category/:serviceId", async (req, res) => {
 
 // header search option
 app.get("/header/search", async (req, res) => {
-  const { location, datesChoosed, category, page = 1, limit = 20 } = req.query; // added page & limit
+  const {
+    location,
+    datesChoosed,
+    category,
+    page = 1,
+    limit = 20,
+    cursor,
+  } = req.query;
 
   try {
-    // If category is missing but location is present, return a response asking for category
     if (!category) {
-      return res
-        .status(200)
-        .json({ success: false, message: "Category is required", service: [] });
-    }
-
-    // Fetch all documents from the specified category collection
-    const services = await mongoose.connection.db
-      .collection(category)
-      .find()
-      .toArray();
-
-    // If location is missing, return all services under the specified category with pagination
-    if (!location) {
-      const total = services.length;
-      const start = (page - 1) * limit;
-      const end = start + parseInt(limit);
-      const paginated = services.slice(start, end);
-
-      return res.status(200).json({
-        success: true,
-        service: paginated,
-        pagination: {
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / limit),
-        },
-      });
-    }
-
-    // Filter venues based on availableLocations if both category and location exist
-    const filteredServices = services.filter((service) =>
-      service.additionalFields?.availableLocations?.includes(location)
-    );
-
-    if (!filteredServices.length) {
       return res.status(200).json({
         success: false,
-        message: "No venues available in the specified location",
+        message: "Category is required",
         service: [],
       });
     }
 
-    // Apply pagination to filtered services
-    const total = filteredServices.length;
+    const collection = mongoose.connection.db.collection(category);
+
+    const query = { serviceVisibility: "active" };
+
+    // 👇 cursor condition (unchanged)
+    if (cursor) {
+      query._id = { $gt: new mongoose.Types.ObjectId(cursor) };
+    }
+
+    let services = await collection
+      .find(query)
+      .sort({ _id: 1 })
+      .limit(parseInt(limit) + (cursor ? 1 : 0))
+      .toArray();
+
+    if (location) {
+      services = services.filter(service =>
+        service.additionalFields?.availableLocations?.includes(location)
+      );
+    }
+
+    // ✅ FIX: detect cursor pagination properly
+    const isCursorPagination = req.query.hasOwnProperty("cursor");
+
+    if (isCursorPagination) {
+      const hasMore = services.length > limit;
+
+      if (hasMore) services.pop();
+
+      const nextCursor =
+        services.length > 0
+          ? services[services.length - 1]._id
+          : null;
+
+      return res.status(200).json({
+        success: true,
+        service: services,
+        nextCursor,
+        hasMore,
+      });
+    }
+
+    // 🟡 EXISTING PAGE LOGIC — untouched
+    const total = services.length;
     const start = (page - 1) * limit;
     const end = start + parseInt(limit);
-    const paginated = filteredServices.slice(start, end);
+    const paginated = services.slice(start, end);
 
-    // Return matched venues with pagination
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       service: paginated,
       pagination: {
@@ -590,11 +693,13 @@ app.get("/header/search", async (req, res) => {
       },
     });
   } catch (err) {
-    res
-      .status(500)
-      .json({ success: false, message: "Error fetching venue details" });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching venue details",
+    });
   }
 });
+
 
 // search bar in the header 
 app.get("/list/services", async (req, res) => {
@@ -942,6 +1047,9 @@ app.get('/protected-route', authenticateToken, async (req, res) => {
   res.status(200).json({ user: req.user }); // Send the user data as JSON response
 });
 
+
+
+
 // vendor venue submission
 app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
   try {
@@ -968,7 +1076,6 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       }
     }
 
-
     // Parse the generated whyus back to an array
     let whyus = [];
     if (formFields.generatedWhyUs) {
@@ -986,18 +1093,43 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       }
     }
 
-
     let customPricing = [];
     if (formFields.customPricing) {
       try {
         customPricing = JSON.parse(formFields.customPricing);
+
       } catch (error) {
         return res.status(400).json({ message: 'Invalid customPricing format.' });
       }
     }
 
-    let groupedUrls = {};
+    let locationAddresses = {};
+    if (formFields.locationAddresses) {
+      try {
+        locationAddresses = JSON.parse(formFields.locationAddresses);
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid locationAddresses format." });
+      }
+    }
 
+    // Precompute lat/lng for each location
+    const enrichedLocationAddresses = {};
+
+    for (const city in locationAddresses) {
+      const address = locationAddresses[city];
+      if (!address) continue;
+
+      const geo = await geocodeAddress(address);
+
+      enrichedLocationAddresses[city] = {
+        address,
+        lat: geo?.lat || 13.0827,
+        lng: geo?.lng || 80.2707,
+      };
+    }
+
+
+    let groupedUrls = {};
     // If groupedUrls is a string, parse it, else use as-is
     if (formFields.groupedUrls) {
       if (typeof formFields.groupedUrls === 'string') {
@@ -1026,29 +1158,29 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
     // ----------------------------
     const spamFields = [];
 
-    for (const key in formFields) {
-      const value = formFields[key];
-      let textToCheck = '';
+    // for (const key in formFields) {
+    //   const value = formFields[key];
+    //   let textToCheck = '';
 
-      if (typeof value === 'string') {
-        textToCheck = value;
-      } else if (Array.isArray(value)) {
-        textToCheck = value.filter(v => typeof v === 'string').join(' ');
-      } else if (typeof value === 'object' && value !== null) {
-        textToCheck = JSON.stringify(value);
-      }
+    //   if (typeof value === 'string') {
+    //     textToCheck = value;
+    //   } else if (Array.isArray(value)) {
+    //     textToCheck = value.filter(v => typeof v === 'string').join(' ');
+    //   } else if (typeof value === 'object' && value !== null) {
+    //     textToCheck = JSON.stringify(value);
+    //   }
 
-      if (textToCheck) {
-        const mlResponse = await axios.post(`${pythonapi}/predict`, {
-          text: textToCheck,
-        });
+    //   if (textToCheck) {
+    //     const mlResponse = await axios.post(`${pythonapi}/predict`, {
+    //       text: textToCheck,
+    //     });
 
-        const { is_spam, confidence } = mlResponse.data;
-        if (is_spam) {
-          spamFields.push({ field: key, confidence });
-        }
-      }
-    }
+    //     const { is_spam, confidence } = mlResponse.data;
+    //     if (is_spam) {
+    //       spamFields.push({ field: key, confidence });
+    //     }
+    //   }
+    // }
 
     if (spamFields.length > 0) {
       return res.status(400).json({
@@ -1079,6 +1211,7 @@ app.post('/venue-submission', adhaarUpload.single('file'), async (req, res) => {
       category,
       additionalFields: {
         ...restFields,
+        locationAddresses, // ✅ overwrite
         generatedWhyUs: whyus,
         customPricing: customPricing,
         customFields: customFields,
@@ -1252,46 +1385,75 @@ app.get("/get-bookings", async (req, res) => {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    // Fetch bookings for a user that are not cancelled
-    const bookings = await Booking.find({
-      userId,
-      // "cancellation.cancelledAt": { $exists: false }, // only not cancelled
-    })
+    /* ---------------- FETCH BOOKINGS ---------------- */
+    const bookings = await Booking.find({ userId })
       .populate("hostId", "_id city firstName lastName profilePic")
       .lean();
 
+    if (!bookings.length) {
+      return res.json([]);
+    }
 
-    // For each booking, fetch its service manually from raw collection
-    const bookingsWithService = await Promise.all(
+    /* ---------------- FETCH TRANSACTIONS (BATCH) ---------------- */
+    const bookingIds = bookings.map(b => b._id);
+
+    const transactions = await Transactions.find({
+      bookingId: { $in: bookingIds }
+    })
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    // Map by bookingId
+    const transactionMap = {};
+    transactions.forEach(txn => {
+      transactionMap[txn.bookingId.toString()] = txn;
+    });
+
+    /* ---------------- ATTACH SERVICE + TRANSACTION ---------------- */
+    const bookingsWithExtras = await Promise.all(
       bookings.map(async (booking) => {
-        if (booking.serviceId && booking.category) {
 
+        /* ---------- SERVICE FETCH ---------- */
+        if (booking.serviceId && booking.category) {
           try {
-            const collection = mongoose.connection.collection(booking.category); // use category as collection name
+            const collection = mongoose.connection.collection(booking.category);
+
             const serviceDoc = await collection.findOne(
               { _id: new mongoose.Types.ObjectId(booking.serviceId) },
-              { projection: { "images.CoverImage": 1, category: 1, "additionalFields.businessName": 1, _id: 1 } }
+              {
+                projection: {
+                  "images.CoverImage": 1,
+                  category: 1,
+                  "additionalFields.businessName": 1
+                }
+              }
             );
 
             if (serviceDoc) {
               booking.serviceId = {
                 coverImg: serviceDoc.images?.CoverImage?.[0] || null,
-                category: serviceDoc.category || booking.category,
-                businessName: serviceDoc.additionalFields.businessName,
-                serviceId: serviceDoc._id,
+                businessName: serviceDoc.additionalFields?.businessName,
+                category: serviceDoc.category,
+                serviceId: serviceDoc._id
               };
             }
           } catch (err) {
-            console.error("Error fetching service for booking:", err);
+            console.error("Service fetch error:", err);
           }
         }
+
+        /* ---------- TRANSACTION ATTACH ---------- */
+        booking.transaction =
+          transactionMap[booking._id.toString()] || null;
+
         return booking;
       })
     );
 
-    res.json(bookingsWithService);
-  } catch (err) {
+    res.json(bookingsWithExtras);
 
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -1303,45 +1465,75 @@ app.get("/get-payments", async (req, res) => {
       return res.status(400).json({ error: "userId is required" });
     }
 
-    // Fetch bookings for a user that are not cancelled
-    const bookings = await Booking.find({
-      userId,
-    })
+    /* ---------------- FETCH BOOKINGS ---------------- */
+    const bookings = await Booking.find({ userId })
       .populate("hostId", "_id city firstName lastName profilePic")
       .lean();
 
+    if (!bookings.length) {
+      return res.json([]);
+    }
 
-    // For each booking, fetch its service manually from raw collection
-    const bookingsWithService = await Promise.all(
+    /* ---------------- FETCH TRANSACTIONS (BATCH) ---------------- */
+    const bookingIds = bookings.map(b => b._id);
+
+    const transactions = await Transactions.find({
+      bookingId: { $in: bookingIds }
+    })
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    // Map by bookingId
+    const transactionMap = {};
+    transactions.forEach(txn => {
+      transactionMap[txn.bookingId.toString()] = txn;
+    });
+
+    /* ---------------- ATTACH SERVICE + TRANSACTION ---------------- */
+    const bookingsWithExtras = await Promise.all(
       bookings.map(async (booking) => {
-        if (booking.serviceId && booking.category) {
 
+        /* ---------- SERVICE FETCH ---------- */
+        if (booking.serviceId && booking.category) {
           try {
-            const collection = mongoose.connection.collection(booking.category); // use category as collection name
+            const collection = mongoose.connection.collection(booking.category);
+
             const serviceDoc = await collection.findOne(
               { _id: new mongoose.Types.ObjectId(booking.serviceId) },
-              { projection: { "images.CoverImage": 1, category: 1, "additionalFields.businessName": 1, _id: 1 } }
+              {
+                projection: {
+                  "images.CoverImage": 1,
+                  category: 1,
+                  "additionalFields.businessName": 1
+                }
+              }
             );
 
             if (serviceDoc) {
               booking.serviceId = {
                 coverImg: serviceDoc.images?.CoverImage?.[0] || null,
-                category: serviceDoc.category || booking.category,
-                businessName: serviceDoc.additionalFields.businessName,
-                serviceId: serviceDoc._id,
+                businessName: serviceDoc.additionalFields?.businessName,
+                category: serviceDoc.category,
+                serviceId: serviceDoc._id
               };
             }
           } catch (err) {
-            console.error("Error fetching service for booking:", err);
+            console.error("Service fetch error:", err);
           }
         }
+
+        /* ---------- TRANSACTION ATTACH ---------- */
+        booking.transaction =
+          transactionMap[booking._id.toString()] || null;
+
         return booking;
       })
     );
 
-    res.json(bookingsWithService);
-  } catch (err) {
+    res.json(bookingsWithExtras);
 
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -1437,6 +1629,69 @@ app.post("/similar-availables/preferred-dates", async (req, res) => {
 
 
 
+// GET /client/approved-services
+app.get("/client/approved-services", async (req, res) => {
+  try {
+    const approvedServices = await RequestedService.find(
+      { isApproved: true },
+      {
+        "additionalFields.businessName": 1,
+        "additionalFields.availableLocations": 1,
+        "additionalFields.locationAddress": 1,
+        "additionalFields.locationLatLng": 1, // <-- precomputed lat/lng
+        "category": 1,
+        "images.CoverImage": 1
+      }
+    );
+
+    const vendorLocations = [];
+
+    for (const vendor of approvedServices) {
+      const businessName = vendor.additionalFields.businessName;
+      const category = vendor.category;
+      const profileURL = vendor.images?.CoverImage?.[0] || `https://i.pravatar.cc/100?u=${businessName}`;
+
+      const locations = vendor.additionalFields.availableLocations || [];
+      const locationLatLng = vendor.additionalFields.locationLatLng || {};
+
+      for (const loc of locations) {
+        let geo = locationLatLng[loc];
+
+        // Fallback: use address or city if lat/lng not stored
+        if (!geo) {
+          const address = vendor.additionalFields.locationAddress?.[loc] || loc;
+          geo = await geocodeAddress(`${address}, Tamil Nadu`);
+        }
+
+        if (!geo) continue;
+
+        vendorLocations.push({
+          businessName,
+          category,
+          lat: geo.lat || 13.0843,    // fallback coords
+          lng: geo.lng || 80.2705,    // fallback coords
+          profileURL,
+          locationName: loc
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      count: vendorLocations.length,
+      data: vendorLocations,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message,
+    });
+  }
+});
+
 
 
 
@@ -1480,6 +1735,7 @@ app.post('/search-ranked-services', async (req, res) => {
     // Step 1: Try direct MongoDB query for businessName
     const directMatches = await RequestedService.find({
       isApproved: true,
+      serviceVisibility: 'active',
       "additionalFields.businessName": { $regex: query, $options: "i" }
     }).lean();
 
@@ -1511,6 +1767,7 @@ app.post('/search-ranked-services', async (req, res) => {
       reviews: getRandomInt(0, 500),
       distance: getRandomFloat(0.1, 20),
     }));
+
 
     // Call Python TF-IDF service
     const response = await axios.post(`${pythonapi}/search`, {
@@ -1606,7 +1863,7 @@ app.post("/test-spam", async (req, res) => {
 
 // Initialize Gemini client with your API key
 const gemini = new GoogleGenAI({
-  apiKey: 'AIzaSyBmrq95Msguj9kaoM4vBriH7AlF0kJog6k', // set your Gemini API key in .env
+  apiKey: 'AIzaSyBtJlcA8pjpsVOixyJzfK8Ami5RjX7r6ww', // set your Gemini API key in .env
 });
 
 app.post("/generate/why-us-reasons", async (req, res) => {
@@ -1637,6 +1894,7 @@ Format:
     res.json({ fullText });
 
   } catch (err) {
+    console.log(err);
     res.status(500).json({ error: "Failed to generate reasons" });
   }
 });
@@ -1797,7 +2055,7 @@ app.get("/order-cancelled/:userId", async (req, res) => {
 // Generate QR token when booking is approved
 app.post("/generate/check-in-qr", async (req, res) => {
   try {
-    const { bookingId } = req.body;
+    const { bookingId, hostId } = req.body;
 
     // Fetch booking from DB
     const booking = await Booking.findById(bookingId);
@@ -1805,7 +2063,7 @@ app.post("/generate/check-in-qr", async (req, res) => {
 
     // Generate JWT token (1 hour expiry)
     const token = jwt.sign(
-      { bookingId: booking._id, role: "vendor" },
+      { bookingId: bookingId, hostId: hostId, role: "vendor" },
       process.env.JWT_SECRET_KEY,
       { expiresIn: "1h" }
     );
@@ -1822,39 +2080,6 @@ app.post("/generate/check-in-qr", async (req, res) => {
     res.json({ qrDataUrl });
   } catch (err) {
     res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.get("/scan/check-in-qr", async (req, res) => {
-  try {
-    const { token } = req.query;
-    if (!token) return res.status(400).json({ error: "Missing token" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    const booking = await Booking.findById(decoded.bookingId)
-      .populate("userId", "firstname lastname profilePic _id email") // populate user name/email only
-
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-
-    // Prepare safe payload for frontend
-    const safeBooking = {
-      _id: booking._id,
-      status: booking.status,
-      amount: booking.amount,
-      razorpayPaymentId: booking.razorpayPaymentId,
-      serviceName: booking.serviceName,
-      category: booking.category,
-      serviceId: booking.serviceId,
-      package: booking.package, // title, description, amount, dates, additionalRequest
-      cancellation: booking.cancellation,
-      user: booking.userId, // populated
-      host: booking.hostId, // optional populated vendor info
-      createdAt: booking.createdAt,
-    };
-
-    res.json({ booking: safeBooking });
-  } catch (err) {
-    res.status(401).json({ error: "Invalid or expired QR" });
   }
 });
 
