@@ -75,8 +75,6 @@ const io = new Server(server, {
     origin: [
       SITE_URL,
       API_URL,
-      "https://www.onivah.com",
-      "https://backend.globalbizreport.com",
       "https://algos.onivah.com"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -137,8 +135,6 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   SITE_URL,
   API_URL,
-  'https://www.onivah.com',
-  'https://backend.globalbizreport.com',
   'https://algos.onivah.com',
 
 ];
