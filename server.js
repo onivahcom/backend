@@ -69,6 +69,13 @@ const server = http.createServer(app);
 const SITE_URL = "https://www.onivah.com";   // your frontend URL
 const API_URL = "https://backend.globalbizreport.com";   // your backend URL
 
+const allowedOrigins = [
+  SITE_URL,
+  // API_URL,
+  'https://onivah.com',
+  'https://algos.onivah.com',
+
+];
 
 const io = new Server(server, {
   cors: {
@@ -76,7 +83,7 @@ const io = new Server(server, {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        callback(null, false); // 🚨 DO NOT throw
       }
     },
     credentials: true,
@@ -135,13 +142,7 @@ io.on('connection', (socket) => {
 
 app.set('trust proxy', 1);
 
-const allowedOrigins = [
-  SITE_URL,
-  // API_URL,
-  'https://onivah.com',
-  'https://algos.onivah.com',
 
-];
 
 const pythonapi = 'https://algos.onivah.com';
 
@@ -151,7 +152,7 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(null, false); // ✅ NOT Error
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -162,7 +163,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // handle preflight for all routes
-app.options("*", cors(corsOptions));
+// app.options("*", cors(corsOptions));
 
 
 app.use((req, res, next) => {
@@ -222,7 +223,11 @@ if (process.env.NODE_ENV === "production") {
         imgSrc: ["'self'", "data:", "https:"],
         scriptSrc: ["'self'"], // allow inline if needed, not recommended
         styleSrc: ["'self'", "'unsafe-inline'"], // allow inline styles if required
-        connectSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          "https://backend.globalbizreport.com",
+          "wss://backend.globalbizreport.com",
+        ],
         fontSrc: ["'self'", "https:", "data:"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
@@ -386,7 +391,7 @@ async function testImageChat() {
 
 // backend inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully.**.");
+  res.status(200).send("Backend connected successfully.*.");
 });
 
 
