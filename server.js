@@ -66,21 +66,24 @@ dotenv.config(); // Load environment variables
 const app = express();
 const server = http.createServer(app);
 
-const SITE_URL = "https://onivah.com";   // your frontend URL
+const SITE_URL = "https://www.onivah.com";   // your frontend URL
 const API_URL = "https://backend.globalbizreport.com";   // your backend URL
 
 
 const io = new Server(server, {
   cors: {
-    origin: [
-      SITE_URL,
-      API_URL,
-      "https://algos.onivah.com"
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    credentials: true
-  }
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST"],
+  },
 });
+
 
 //  SOCKET.IO EVENTS
 io.on('connection', (socket) => {
@@ -134,7 +137,8 @@ app.set('trust proxy', 1);
 
 const allowedOrigins = [
   SITE_URL,
-  API_URL,
+  // API_URL,
+  'https://onivah.com',
   'https://algos.onivah.com',
 
 ];
@@ -382,7 +386,7 @@ async function testImageChat() {
 
 // backend inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully.***.***");
+  res.status(200).send("Backend connected successfully.**.");
 });
 
 
@@ -792,7 +796,7 @@ function sendEmail(email, otp) {
               <li>📸 Professional Photographers for Every Occasion</li>
               <li>🎁 Exclusive Deals for Early Bookings</li>
             </ul>
-            <p>Visit us at <a href="https://onivah.com" style="color: #6d4d94; text-decoration: none;">Onivah</a></p>
+            <p>Visit us at <a href="https://www.onivah.com" style="color: #6d4d94; text-decoration: none;">Onivah</a></p>
           </div>
         </div>
       `,
