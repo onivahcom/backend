@@ -166,7 +166,7 @@ adminRouter.get('/get-file/:id', async (req, res) => {
         }
 
         // Construct relative path for frontend
-        const filePath = `https://backend.globalbizreport.com/uploads/${service.file.storedName}`;
+        const filePath = `https://backend.onivah.com/uploads/${service.file.storedName}`;
 
         res.status(200).json({
             service,

@@ -60,6 +60,7 @@ import paymentAnalyticsRouter from "./routes/PaymentAnalytics.js";
 import QRCode from "qrcode";
 import Transactions from "./models/Transactions.js";
 import vendorPricings from "./routes/vendorPricings.js";
+import transporter from "./utils/EmailConfig.js";
 
 dotenv.config(); // Load environment variables
 
@@ -67,7 +68,7 @@ const app = express();
 const server = http.createServer(app);
 
 const SITE_URL = "https://www.onivah.com";   // your frontend URL
-const API_URL = "https://backend.globalbizreport.com";   // your backend URL
+const API_URL = "https://backend.onivah.com";   // your backend URL
 
 const allowedOrigins = [
   SITE_URL,
@@ -83,7 +84,7 @@ const io = new Server(server, {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(null, false); // 🚨 DO NOT throw
+        callback(new Error("CORS not allowed"));
       }
     },
     credentials: true,
@@ -152,7 +153,7 @@ const corsOptions = {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(null, false); // ✅ NOT Error
+      callback(new Error("CORS not allowed"));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -225,8 +226,8 @@ if (process.env.NODE_ENV === "production") {
         styleSrc: ["'self'", "'unsafe-inline'"], // allow inline styles if required
         connectSrc: [
           "'self'",
-          "https://backend.globalbizreport.com",
-          "wss://backend.globalbizreport.com",
+          "https://backend.onivah.com",
+          "wss://backend.onivah.com",
         ],
         fontSrc: ["'self'", "https:", "data:"],
         objectSrc: ["'none'"],
@@ -391,7 +392,7 @@ async function testImageChat() {
 
 // backend inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully.*.");
+  res.status(200).send("Backend connected successfully.**.");
 });
 
 
@@ -808,12 +809,12 @@ function sendEmail(email, otp) {
     };
     resolve({ success: true, message: `OTP sent to email: ${email}` });
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return reject(new Error('Error sending email'));
-      }
-      resolve({ success: true, message: `OTP sent to email: ${email}` });
-    });
+    // transporter.sendMail(mailOptions, (error, info) => {
+    //   if (error) {
+    //     return reject(new Error('Error sending email'));
+    //   }
+    //   resolve({ success: true, message: `OTP sent to email: ${email}` });
+    // });
   });
 }
 
