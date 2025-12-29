@@ -16,6 +16,7 @@ import Booking from "../models/bookingSchema.js";
 import { ServicePricingConfig } from "../models/ServicePricingConfig.js";
 import ServiceAvailability from "../models/serviceAvailability.js";
 import Conversation from "../models/Conversation.js";
+import transporter from "../utils/EmailConfig.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,16 +45,7 @@ const upload = multer({
 
 vendorRouter.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const transporter = nodemailer.createTransport({
-    service: "Gmail", // Replace with your email service provider, or use custom SMTP settings
-    tls: {
-        rejectUnauthorized: false,
-    },
-    auth: {
-        user: "pabishek61001@gmail.com", // Replace with your email address
-        pass: "frau isgz jtkt gebe", // Replace with your email password or use environment variables
-    },
-});
+
 
 // store otp
 let otpStore = {};
@@ -319,7 +311,7 @@ const sendEmailOtp = async (email) => {
     };
 
     try {
-        // await transporter.sendMail(mailOptions);
+        await transporter.sendMail(mailOptions);
         console.log(`OTP sent to email: ${email, otp}`);
         return otp;  // Return the OTP for later verification
     } catch (error) {

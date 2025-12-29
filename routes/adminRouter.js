@@ -14,20 +14,12 @@ import cloudinary from "../config/cloudinary.js";
 import bcrypt from "bcrypt";
 import { ServicePricingConfig } from "../models/ServicePricingConfig.js";
 import Transactions from "../models/Transactions.js";
+import transporter from "../utils/EmailConfig.js";
 
 
 const adminRouter = express.Router();
 
-const transporter = nodemailer.createTransport({
-    service: "Gmail", // Replace with your email service provider, or use custom SMTP settings
-    tls: {
-        rejectUnauthorized: false,
-    },
-    auth: {
-        user: "pabishek61001@gmail.com", // Replace with your email address
-        pass: "frau isgz jtkt gebe", // Replace with your email password or use environment variables
-    },
-});
+
 
 const verifyToken = (req, res, next) => {
     const token = req.cookies.onivah_admin; // ✅ Get token from cookie

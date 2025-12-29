@@ -809,12 +809,12 @@ function sendEmail(email, otp) {
     };
     resolve({ success: true, message: `OTP sent to email: ${email}` });
 
-    // transporter.sendMail(mailOptions, (error, info) => {
-    //   if (error) {
-    //     return reject(new Error('Error sending email'));
-    //   }
-    //   resolve({ success: true, message: `OTP sent to email: ${email}` });
-    // });
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return reject(new Error('Error sending email'));
+      }
+      resolve({ success: true, message: `OTP sent to email: ${email}` });
+    });
   });
 }
 
