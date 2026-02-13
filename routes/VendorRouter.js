@@ -59,7 +59,7 @@ const verificationTokens = {}; // In-memory store for verification tokens
 // const client = twilio(accountSid, authToken);
 
 // vendor authentication
-const vendorAuth = async (req, res, next) => {
+export const vendorAuth = async (req, res, next) => {
 
     const token = req.cookies?.vd_token;
 
@@ -597,8 +597,6 @@ vendorRouter.post('/update-images', vendorAuth, async (req, res) => {
             { $set: { images } }
         );
 
-
-
         if (!updatedDoc) {
             return res.status(404).json({ error: 'Document not found with provided categoryId.' });
         }
@@ -877,8 +875,50 @@ vendorRouter.post('/update-folder-name', vendorAuth, async (req, res) => {
 
         return res.status(200).json({ message: 'Folder renamed successfully' });
     } catch (error) {
-        console.error('Error updating folder name:', error);
+        console.log('Error updating folder name:', error);
         return res.status(500).json({ message: 'Server error while updating folder name' });
+    }
+});
+
+// ================= Delete Images =================
+vendorRouter.post("/delete-images", vendorAuth, async (req, res) => {
+    try {
+        const { category, categoryId, folderName, images } = req.body;
+
+        if (!category || !categoryId || !images || !folderName) {
+            return res.status(400).json({ error: 'category, categoryId, folderName, and images are required.' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+            return res.status(400).json({ error: 'Invalid categoryId.' });
+        }
+
+        const collection = mongoose.connection.db.collection(category);
+        const objectId = new mongoose.Types.ObjectId(categoryId);
+
+        // Fetch current document
+        const doc = await collection.findOne({ _id: objectId });
+        if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
+        // If folder doesn't exist, nothing to delete
+        if (!doc.images?.[folderName]) {
+            return res.status(400).json({ error: 'Folder not found in document.' });
+        }
+
+        // Remove specified URLs from the folder
+        const updatedFolderImages = doc.images[folderName].filter(imgUrl => !images.includes(imgUrl));
+        const updatedImages = { ...doc.images, [folderName]: updatedFolderImages };
+
+        // Update document
+        await collection.updateOne(
+            { _id: objectId },
+            { $set: { images: updatedImages } }
+        );
+
+        return res.json({ message: 'Images removed successfully.', updatedImages });
+    } catch (error) {
+        console.error('Error deleting images:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
@@ -941,7 +981,7 @@ vendorRouter.get("/pending-orders/count", vendorAuth, async (req, res) => {
         }
 
         const count = await Booking.countDocuments({
-            status: { $in: ['authorized', 'requested', 'captured', 'confirmed'] },
+            status: { $in: ['authorized', 'requested', 'captured', 'confirmed', 'pending'] },
             hostId: vendorId, // cast string to ObjectId
         });
 
@@ -1007,6 +1047,124 @@ vendorRouter.get("/manage-dates", vendorAuth, async (req, res) => {
 
 // manage availability by vendor
 
+// vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
+//     try {
+//         const { category, businessName, email, updates } = req.body;
+
+//         // 🔒 Validation
+//         if (
+//             !category ||
+//             !businessName ||
+//             !email ||
+//             !Array.isArray(updates) ||
+//             updates.length === 0
+//         ) {
+//             return res.status(400).json({ error: "Invalid request data." });
+//         }
+
+//         const db = mongoose.connection.db;
+//         const categoryCollection = db.collection(category);
+
+//         const existingCategory = await categoryCollection.findOne({
+//             "additionalFields.businessName": businessName,
+//             email,
+//         });
+
+//         if (!existingCategory) {
+//             return res.status(404).json({ error: "Category not found" });
+//         }
+
+//         // 🔹 Helpers
+//         const normalizeDate = (d) => {
+//             if (!d) return null;
+//             const date = new Date(d);
+//             if (isNaN(date)) return null;
+
+//             return date.toISOString().split("T")[0];
+//         };
+
+//         const sanitize = (arr = []) =>
+//             Array.isArray(arr)
+//                 ? arr
+//                     .map((i) =>
+//                         i?.date
+//                             ? {
+//                                 date: normalizeDate(i.date),
+//                                 title: i.title || "",
+//                                 description: i.description || "",
+//                                 status: (i.status || "").toLowerCase(),
+//                                 checkIn: i.checkIn || null,
+//                                 checkOut: i.checkOut || null
+//                             }
+//                             : null
+//                     )
+//                     .filter(Boolean)
+//                 : [];
+
+//         // 🔹 Load existing dates safely
+//         const dates = existingCategory.dates || {};
+
+//         const normalizedDates = {
+//             booked: sanitize(dates.booked),
+//             available: sanitize(dates.available),
+//             waiting: sanitize(dates.waiting),
+//             others: sanitize(dates.others),
+//         };
+
+//         // 🔥 PROCESS DELTA UPDATES
+//         updates.forEach((update) => {
+//             const status = update.status?.toLowerCase();
+//             const date = normalizeDate(update.date);
+
+//             if (!date || !status) return;
+
+//             const cleanItem = {
+//                 date,
+//                 title: update.title || status,
+//                 description: update.description || "",
+//                 status,
+//                 checkIn: update.checkIn,
+//                 checkOut: update.checkOut,
+//             };
+
+//             // 🔹 PRIMARY STATUSES → REPLACE
+//             if (["booked", "available", "waiting"].includes(status)) {
+//                 // ❌ remove date from all primary statuses
+//                 ["booked", "available", "waiting"].forEach((key) => {
+//                     normalizedDates[key] = normalizedDates[key].filter(
+//                         (d) => d.date !== date
+//                     );
+//                 });
+
+//                 // ✅ insert into correct primary status
+//                 normalizedDates[status].push(cleanItem);
+//             }
+
+//             // 🔹 OTHERS → APPEND (no replacement)
+//             else if (status === "others") {
+//                 normalizedDates.others.push(cleanItem);
+//             }
+//         });
+
+//         // 🔹 Save
+//         await categoryCollection.updateOne(
+//             {
+//                 "additionalFields.businessName": businessName,
+//                 email,
+//             },
+//             { $set: { dates: normalizedDates } }
+//         );
+
+//         return res.status(200).json({
+//             message: "Dates updated successfully",
+//             dates: normalizedDates,
+//         });
+//     } catch (error) {
+//         console.error("Error updating category dates:", error);
+//         return res.status(500).json({ error: "Internal Server Error" });
+//     }
+// });
+
 vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
     try {
         const { category, businessName, email, updates } = req.body;
@@ -1034,33 +1192,30 @@ vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
             return res.status(404).json({ error: "Category not found" });
         }
 
-        // 🔹 Helpers
-        const normalizeDate = (d) => d?.toString().split("T")[0];
+        // 🔹 Ensure dates structure exists
+        const existingDates = existingCategory.dates || {
+            booked: [],
+            available: [],
+            waiting: [],
+            others: [],
+        };
 
-        const sanitize = (arr = []) =>
-            Array.isArray(arr)
-                ? arr
-                    .map((i) =>
-                        i?.date
-                            ? {
-                                date: normalizeDate(i.date),
-                                title: i.title || "",
-                                description: i.description || "",
-                                status: (i.status || "").toLowerCase(),
-                            }
-                            : null
-                    )
-                    .filter(Boolean)
-                : [];
+        // 🔹 Safe Date Normalizer (ALWAYS YYYY-MM-DD)
+        const normalizeDate = (d) => {
+            if (!d) return null;
 
-        // 🔹 Load existing dates safely
-        const dates = existingCategory.dates || {};
+            const date = new Date(d);
+            if (isNaN(date)) return null;
 
-        const normalizedDates = {
-            booked: sanitize(dates.booked),
-            available: sanitize(dates.available),
-            waiting: sanitize(dates.waiting),
-            others: sanitize(dates.others),
+            return date.toISOString().split("T")[0];
+        };
+
+        // 🔹 Clone existing (avoid mutation bugs)
+        const updatedDates = {
+            booked: [...(existingDates.booked || [])],
+            available: [...(existingDates.available || [])],
+            waiting: [...(existingDates.waiting || [])],
+            others: [...(existingDates.others || [])],
         };
 
         // 🔥 PROCESS DELTA UPDATES
@@ -1068,31 +1223,40 @@ vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
             const status = update.status?.toLowerCase();
             const date = normalizeDate(update.date);
 
-            if (!date || !status) return;
+            if (!status || !date) return;
 
             const cleanItem = {
                 date,
                 title: update.title || status,
                 description: update.description || "",
                 status,
+                checkIn: update.checkIn || null,
+                checkOut: update.checkOut || null,
             };
 
-            // 🔹 PRIMARY STATUSES → REPLACE
+            // 🔹 PRIMARY STATUSES → Replace date across them
             if (["booked", "available", "waiting"].includes(status)) {
-                // ❌ remove date from all primary statuses
+
+                // Remove date from all primary statuses
                 ["booked", "available", "waiting"].forEach((key) => {
-                    normalizedDates[key] = normalizedDates[key].filter(
-                        (d) => d.date !== date
+                    updatedDates[key] = updatedDates[key].filter(
+                        (item) => normalizeDate(item.date) !== date
                     );
                 });
 
-                // ✅ insert into correct primary status
-                normalizedDates[status].push(cleanItem);
+                // Add to correct status
+                updatedDates[status].push(cleanItem);
             }
 
-            // 🔹 OTHERS → APPEND (no replacement)
+            // 🔹 OTHERS → Only modify others
             else if (status === "others") {
-                normalizedDates.others.push(cleanItem);
+
+                // Remove same date only inside others
+                updatedDates.others = updatedDates.others.filter(
+                    (item) => normalizeDate(item.date) !== date
+                );
+
+                updatedDates.others.push(cleanItem);
             }
         });
 
@@ -1102,13 +1266,14 @@ vendorRouter.put("/update-category-dates", vendorAuth, async (req, res) => {
                 "additionalFields.businessName": businessName,
                 email,
             },
-            { $set: { dates: normalizedDates } }
+            { $set: { dates: updatedDates } }
         );
 
         return res.status(200).json({
             message: "Dates updated successfully",
-            dates: normalizedDates,
+            dates: updatedDates,
         });
+
     } catch (error) {
         console.error("Error updating category dates:", error);
         return res.status(500).json({ error: "Internal Server Error" });

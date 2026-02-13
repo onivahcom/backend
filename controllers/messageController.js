@@ -19,7 +19,7 @@ function encryptMessage(text) {
 }
 
 // Decrypt
-function decryptMessage(encryptedText, ivHex) {
+export function decryptMessage(encryptedText, ivHex) {
     const iv = Buffer.from(ivHex, "hex");
     const decipher = crypto.createDecipheriv("aes-256-cbc", secretKey, iv);
     let decrypted = decipher.update(encryptedText, "hex", "utf8");
@@ -27,7 +27,7 @@ function decryptMessage(encryptedText, ivHex) {
 
     return decrypted;
 }
-function sanitizeMessage(msg) {
+export function sanitizeMessage(msg) {
     return msg
         .replace(/\b\d{10}\b/g, '[hidden-phone]')
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}/gi, '[hidden-email]')

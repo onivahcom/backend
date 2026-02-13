@@ -8,6 +8,7 @@ import crypto from "crypto";
 import Transactions from '../models/Transactions.js';
 import axios from 'axios';
 import ScheduledCaptures from '../models/ScheduledCapture.js';
+import authenticateToken from '../middleware/userAuth.js';
 
 const paymentRouter = express.Router();
 
@@ -63,12 +64,14 @@ paymentRouter.post('/create-link', async (req, res) => {
 });
 
 // User requests booking
-paymentRouter.post('/book', async (req, res) => {
+paymentRouter.post('/book', authenticateToken, async (req, res) => {
 
     const { userId, hostId, amount, package: pkg, serviceId, serviceName, category, cancellationPolicy, paymentPreference } = req.body;
 
     const cleanAmount = Math.round(amount);
     const isDelayed = paymentPreference === 'delayed';
+    const finalUserId = mongoose.Types.ObjectId.isValid(userId) ? userId : new mongoose.Types.ObjectId();
+
 
     try {
         // Create Razorpay order with payment_capture=0 (authorize only)
@@ -81,17 +84,19 @@ paymentRouter.post('/book', async (req, res) => {
 
         // Save booking in DB
         const booking = new Booking({
-            userId,
+            userId: finalUserId,
             hostId,
             amount: cleanAmount,
-            status: isDelayed ? 'requested' : 'confirmed',
+            status: 'attempted',
             razorpayOrderId: order.id,
             package: {
                 title: pkg.title,
                 description: pkg.description,
                 amount: pkg.price,
                 dates: pkg.dates,
-                additionalRequest: pkg.additionalRequest || ""
+                additionalRequest: pkg.additionalRequest || "",
+                checkIn: pkg.checkIn,
+                checkOut: pkg.checkOut,
             },
             serviceName,
             category,
@@ -102,8 +107,9 @@ paymentRouter.post('/book', async (req, res) => {
         await booking.save();
 
 
-        res.json({ success: true, order });
+        res.json({ success: true, order, rzp_key: process.env.RAZORPAY_KEY_ID });
     } catch (err) {
+        console.log(err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -111,7 +117,7 @@ paymentRouter.post('/book', async (req, res) => {
 // save-payment
 paymentRouter.post("/save-payment", async (req, res) => {
     try {
-        const { orderId, paymentId, signature, paymentPreference, razorpayCardToken } = req.body;
+        const { orderId, paymentId, signature, paymentPreference, razorpayCardToken, checkIn, checkOut } = req.body;
 
         // 1. Verify signature
         const body = `${orderId}|${paymentId}`;
@@ -148,18 +154,15 @@ paymentRouter.post("/save-payment", async (req, res) => {
         // 4. Save Transaction
         await Transactions.create({
             provider: "RAZORPAY",
-
             bookingId: booking._id,
             userId: booking.userId,
             hostId: booking.hostId,
             serviceId: booking.serviceId,
             serviceName: booking.serviceName,
             category: booking.category,
-
             amount: booking.amount,
             currency: "INR",
             status: paymentPreference === 'delayed' ? "authorized" : 'captured',
-
             razorpay: {
                 orderId,
                 paymentId,
@@ -190,63 +193,153 @@ paymentRouter.post("/save-payment", async (req, res) => {
         // ------------------------------------------
         // 5. If NOT delayed => Auto Book Dates Here
         // ------------------------------------------
+        // if (paymentPreference !== "delayed") {
+        //     console.log(paymentPreference);
+        //     const serviceId = booking.serviceId;
+        //     const category = booking.category;
+        //     const dates = booking.package?.dates || [];
+
+        //     if (!serviceId || !category) {
+        //         console.log(" Missing serviceId or category in booking");
+        //         return;
+        //     }
+
+        //     if (dates.length > 0) {
+
+        //         const dateStrings = dates.map(
+        //             d => new Date(d).toISOString().split("T")[0]
+        //         );
+
+        //         // Fetch service
+        //         const service = await mongoose.connection.db
+        //             .collection(category)
+        //             .findOne({ _id: new mongoose.Types.ObjectId(serviceId) });
+
+        //         if (service) {
+        //             const serviceDates = service.dates || {
+        //                 booked: [],
+        //                 waiting: [],
+        //                 available: []
+        //             };
+
+        //             // Convert booked list to set
+        //             const bookedSet = new Set(
+        //                 serviceDates.booked.map(d => new Date(d).toISOString().split("T")[0])
+        //             );
+
+        //             // Add new dates
+        //             dateStrings.forEach(d => bookedSet.add(d));
+
+        //             const updatedBooked = Array.from(bookedSet);
+
+        //             await mongoose.connection.db
+        //                 .collection(category)
+        //                 .updateOne(
+        //                     { _id: new mongoose.Types.ObjectId(serviceId) },
+        //                     {
+        //                         $set: { "dates.booked": updatedBooked },
+        //                         $pull: {
+        //                             "dates.waiting": { date: { $in: dateStrings } },
+        //                             "dates.available": { date: { $in: dateStrings } }
+        //                         }
+        //                     }
+        //                 );
+
+        //         }
+        //     }
+        // }
+
         if (paymentPreference !== "delayed") {
 
             const serviceId = booking.serviceId;
             const category = booking.category;
             const dates = booking.package?.dates || [];
 
-            if (!serviceId || !category) {
-                console.error("❌ Missing serviceId or category in booking");
-            } else if (dates.length > 0) {
+            // Fetch service
+            const service = await mongoose.connection.db
+                .collection(category)
+                .findOne({ _id: new mongoose.Types.ObjectId(serviceId) });
 
-                const dateStrings = dates.map(
-                    d => new Date(d).toISOString().split("T")[0]
-                );
+            if (!service) return;
 
-                // Fetch service
-                const service = await mongoose.connection.db
-                    .collection(category)
-                    .findOne({ _id: new mongoose.Types.ObjectId(serviceId) });
+            const serviceDates = service.dates || {
+                booked: [],
+                waiting: [],
+                available: [],
+                others: []
+            };
 
-                if (service) {
-                    const serviceDates = service.dates || {
-                        booked: [],
-                        waiting: [],
-                        available: []
-                    };
+            /**
+             * STEP 1: Normalize existing booked entries into a Map (keyed by date)
+             * This avoids duplicates and keeps full objects
+             */
+            const bookedMap = new Map();
 
-                    // Convert booked list to set
-                    const bookedSet = new Set(
-                        serviceDates.booked.map(d => new Date(d).toISOString().split("T")[0])
-                    );
+            (serviceDates.booked || []).forEach(b => {
+                if (!b) return;
 
-                    // Add new dates
-                    dateStrings.forEach(d => bookedSet.add(d));
-
-                    const updatedBooked = Array.from(bookedSet);
-
-                    await mongoose.connection.db
-                        .collection(category)
-                        .updateOne(
-                            { _id: new mongoose.Types.ObjectId(serviceId) },
-                            {
-                                $set: { "dates.booked": updatedBooked },
-                                $pull: {
-                                    "dates.waiting": { $in: dateStrings },
-                                    "dates.available": { $in: dateStrings }
-                                }
-                            }
-                        );
+                // if old data is just a string date
+                if (typeof b === "string") {
+                    bookedMap.set(b, {
+                        date: b,
+                        title: "booked",
+                        description: "",
+                        status: "booked",
+                        checkIn: null,
+                        checkOut: null
+                    });
                 }
-            }
-        }
 
+                // if proper object
+                if (typeof b === "object" && b.date) {
+                    bookedMap.set(b.date, b);
+                }
+            });
+
+            /**
+             * STEP 2: Create booked objects for new dates
+             */
+            dates.forEach(date => {
+                if (!bookedMap.has(date)) {
+                    bookedMap.set(date, {
+                        date,
+                        title: booking?.package?.title || "booked",
+                        description: booking?.package?.description || "",
+                        status: "booked",
+                        checkIn: checkIn || null,
+                        checkOut: checkOut || null
+                    });
+                }
+            });
+
+            const updatedBooked = Array.from(bookedMap.values());
+
+            /**
+             * STEP 3: Update DB
+             * - Set booked with full objects
+             * - Remove same dates from waiting & available
+             */
+            await mongoose.connection.db
+                .collection(category)
+                .updateOne(
+                    { _id: new mongoose.Types.ObjectId(serviceId) },
+                    {
+                        $set: {
+                            "dates.booked": updatedBooked
+                        },
+                        // $pull: {
+                        //     "dates.waiting": { date: { $in: dateStrings } },
+                        //     "dates.available": { date: { $in: dateStrings } }
+                        // }
+                    }
+                );
+        }
 
 
         res.json({ success: true, booking });
 
     } catch (err) {
+        console.log(err);
         res.status(500).json({ success: false, error: "Server error" });
     }
 });
@@ -566,6 +659,7 @@ paymentRouter.get("/get-bookings", async (req, res) => {
             .populate("userId", "_id city firstname lastname profilePic");
         res.json(bookings);
     } catch (err) {
+        console.log(err);
         res.status(500).json({ error: "Server error" });
     }
 });

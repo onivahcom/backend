@@ -8,6 +8,7 @@ import Notification from "../models/Notifications.js";
 import Transactions from "../models/Transactions.js";
 import Razorpay from "razorpay";
 import axios from "axios";
+import { vendorAuth } from "./VendorRouter.js";
 
 
 const cancellationRouter = express.Router();
@@ -17,12 +18,17 @@ const razorpay = new Razorpay({
     key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
+
 cancellationRouter.post("/cancel-order", async (req, res) => {
 
     try {
         const { bookingId, reason, role } = req.body;
-        const userId = req.user._id;
+
+
+        // const userId = req.user._id;
         const booking = await Booking.findById(bookingId);
+
+        console.log(booking);
         const collectionName = booking.category.toLowerCase();
         const collection = mongoose.connection.collection(collectionName);
         const service = await collection.findOne({ _id: booking.serviceId });
@@ -185,6 +191,7 @@ cancellationRouter.post("/cancel-order", async (req, res) => {
 
         res.json({ success: true, booking });
     } catch (error) {
+        console.log(error);
         res.status(500).json({ message: "Cancellation failed", error });
     }
 });

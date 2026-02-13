@@ -33,7 +33,9 @@ const bookingSchema = new mongoose.Schema({
         description: { type: String },
         amount: { type: Number, required: true },
         dates: [{ type: Date }],   // array of dates
-        additionalRequest: { type: String } // now inside package
+        additionalRequest: { type: String }, // now inside package
+        checkIn: { type: String, },
+        checkOut: { type: String, },
     },
 
     // Rejection details

@@ -67,7 +67,7 @@ dotenv.config(); // Load environment variables
 const app = express();
 const server = http.createServer(app);
 
-const SITE_URL = "https://www.onivah.com";   // your frontend URL
+const SITE_URL = "https://wwww.onivah.com/";   // your frontend URL
 const API_URL = "https://backend.onivah.com";   // your backend URL
 
 const allowedOrigins = [
@@ -91,7 +91,6 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-
 
 //  SOCKET.IO EVENTS
 io.on('connection', (socket) => {
@@ -143,8 +142,6 @@ io.on('connection', (socket) => {
 
 app.set('trust proxy', 1);
 
-
-
 const pythonapi = 'https://algos.onivah.com';
 
 const corsOptions = {
@@ -163,41 +160,12 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// handle preflight for all routes
-// app.options("*", cors(corsOptions));
-
-
 app.use((req, res, next) => {
   req.io = io; // 👈 Attach io to request object
   next();
 });
 
-
 app.use(cookieParser());
-
-
-// app.use(
-//   helmet({
-//     contentSecurityPolicy: {
-//       directives: {
-//         defaultSrc: ["'self'"],
-
-//         connectSrc: [
-//           "'self'",
-//           SITE_URL,
-//           API_URL,
-//           // `ws://localhost:4000`,
-//         ],
-
-//         frameAncestors: [
-//           "'self'",
-//           SITE_URL,
-//         ],
-//       },
-//     },
-//   })
-// );
-
 
 // Middleware to parse JSON bodies
 app.use(express.json({ limit: "50mb" }));
@@ -210,7 +178,6 @@ app.use((req, res, next) => {
   );
   next();
 });
-
 
 app.use('/uploads', express.static('uploads'));
 
@@ -267,6 +234,22 @@ if (process.env.NODE_ENV === "production") {
 // Disable x-powered-by always
 app.disable("x-powered-by");
 
+// General API limiter
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 50, // 50 requests per IP
+  message: "Too many requests, please try again later.",
+});
+
+
+// Login limiter (more strict)
+const loginLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 10 minutes
+  max: 5,
+  message: "Too many login attempts. Please try after 10 minutes.",
+});
+
+
 
 // middleware
 const authenticateToken = async (req, res, next) => {
@@ -277,9 +260,12 @@ const authenticateToken = async (req, res, next) => {
     return res.status(401).json({ error: "Unauthorized: No token provided." });
   }
 
+
   jwt.verify(token, process.env.JWT_SECRET_KEY, async (err, payload) => {
     if (err) {
       if (err.name === 'TokenExpiredError') {
+        console.log(err);
+
         return res.status(403).json({ error: "Token expired or invalid. Please log in again." });
       }
       return res.status(401).json({ error: 'Invalid token' }); // 🚫 bad token
@@ -294,6 +280,7 @@ const authenticateToken = async (req, res, next) => {
       req.user = user; // Attach full user data to request
       next();
     } catch (dbError) {
+      console.log(dbError);
       return res.status(500).json({ error: "Internal server error." });
     }
   });
@@ -310,13 +297,13 @@ app.use("/refreshToken", tokenGen);
 app.use("/api/vendor/profile", vendorProfilePicUpload);
 app.use("/api/conversations", conversationRouter);
 app.use("/api/messages", messageRouter);
-app.use('/api/payments', paymentRouter);
+app.use('/api/payments', apiLimiter, paymentRouter);
 app.use('/api/services', locationServiceRouter);
 app.use("/api/notifications", notificationRouter);
 app.use("/api/feedback", feedbackRouter);
-app.use("/api/cancellations", authenticateToken, cancellationRouter);
-app.use("/api/payment/analytics", paymentAnalyticsRouter);
-app.use("/api/vendor/pricings", vendorPricings);
+app.use("/api/cancellations", cancellationRouter);
+app.use("/api/payment/analytics", apiLimiter, paymentAnalyticsRouter);
+app.use("/api/vendor/pricings", apiLimiter, vendorPricings);
 
 app.get("/api/feedback/:serviceId", getFeedbackByService);
 
@@ -392,7 +379,7 @@ async function testImageChat() {
 
 // backend inital route
 app.get("/", (req, res) => {
-  res.status(200).send("Backend connected successfully.**.");
+  res.status(200).send("Backend connected successfully.***.");
 });
 
 
@@ -438,7 +425,7 @@ async function geocodeAddress(address, city) {
         };
       }
     } catch (err) {
-      console.error("Geocode error:", err);
+      console.log("Geocode error:", err);
     }
   }
 
@@ -455,7 +442,6 @@ async function geocodeAddress(address, city) {
 // admin login verification
 app.post("/admin-login", async (req, res) => {
   const { username, password, role } = req.body;
-
   try {
     // Find admin by username AND role
     const admin = await AdminTable.findOne({ userName: username });
@@ -492,6 +478,7 @@ app.post("/admin-login", async (req, res) => {
       sameSite: "Lax",
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
+
 
     res
       .status(200)
@@ -851,7 +838,6 @@ function verifyOTP(userKey, enteredOtp) {
 
   if (enteredOtp === '000000') {
     return { success: true, message: "OTP verified successfully." };
-
   }
 
   // Check if the OTP has expired (more than 10 minutes)
@@ -929,16 +915,16 @@ async function profileOtpSending(req, res) {
 }
 
 // Login OTP sending
-app.post('/login/send-otp', (req, res) => handleOTPSending(req, res, false));
+app.post('/login/send-otp', loginLimiter, (req, res) => handleOTPSending(req, res, false));
 
 // Signup OTP sending
-app.post('/signup/send-otp', (req, res) => handleOTPSending(req, res, true));
+app.post('/signup/send-otp', loginLimiter, (req, res) => handleOTPSending(req, res, true));
 
 // profile OTP sending ( for change )
-app.post('/profile/send-otp', (req, res) => profileOtpSending(req, res));
+app.post('/profile/send-otp', loginLimiter, (req, res) => profileOtpSending(req, res));
 
 // profile verify OTP
-app.post("/profile/verify-otp", async (req, res) => {
+app.post("/profile/verify-otp", loginLimiter, async (req, res) => {
   const { otp, phone, userId } = req.body;  // OTP, phone, and userId received from the frontend
 
   if (!otp || !phone || !userId) {
@@ -971,7 +957,7 @@ app.post("/profile/verify-otp", async (req, res) => {
 });
 
 // verify login otp
-app.post('/login/verify-otp', async (req, res) => {
+app.post('/login/verify-otp', loginLimiter, async (req, res) => {
   const { loginInput, otp, signUp } = req.body;
   const storedOtpData = otpStore[loginInput];
 
@@ -996,7 +982,7 @@ app.post('/login/verify-otp', async (req, res) => {
 
       const unique_Id = generateOnivahId();
       const newUser = new userTable({
-        userId: `onivah_${unique_Id}`,
+        userId: `${unique_Id}`,
         [storedOtpData.userType === 'phone' ? 'phone' : 'email']: loginInput,
         entry_Time: new Date(),
       });
@@ -1459,7 +1445,7 @@ app.get("/get-bookings", async (req, res) => {
     res.json(bookingsWithExtras);
 
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -1582,6 +1568,7 @@ app.get("/recently-viewed/:category/:serviceId", async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
+    console.log(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -1970,7 +1957,7 @@ app.get("/recommend/:serviceId", async (req, res) => {
 
     // 2. Fetch other services
     const allServices = await RequestedService.find(
-      { linkedServiceId: { $ne: serviceId }, isApproved: true },
+      { linkedServiceId: { $ne: serviceId }, isApproved: true, serviceVisibility: 'active' },
       {
         "additionalFields.phone": 0, // exclude sensitive info
         "additionalFields.addressLine1": 0, // exclude sensitive info
@@ -2085,6 +2072,7 @@ app.post("/generate/check-in-qr", async (req, res) => {
 
     res.json({ qrDataUrl });
   } catch (err) {
+    console.log(err);
     res.status(500).json({ error: "Server error" });
   }
 });

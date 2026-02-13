@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
+import Message from '../models/Message.js';
+import { decryptMessage } from './messageController.js';
 
 // Create or Get existing conversation
 export const createOrGetConversation = async (req, res) => {
@@ -83,11 +85,40 @@ export const getUserConversations = async (req, res) => {
                         .select('additionalFields.businessName images')
                         .lean();
 
+                    const messageFromDB = await Message.findOne({ conversationId: convo._id })
+                        .sort({ sentAt: -1 })
+                        .select("text iv sentAt")
+                        .lean();
+
+                    let lastMessage = null;
+
+                    if (messageFromDB) {
+                        try {
+                            const decryptedText = decryptMessage(
+                                messageFromDB.text,
+                                messageFromDB.iv
+                            );
+
+                            lastMessage = {
+                                text: decryptedText,
+                                senderId: messageFromDB.senderId,
+                                sentAt: messageFromDB.sentAt
+                            };
+                        } catch (err) {
+                            lastMessage = {
+                                text: "[decryption failed]",
+                                senderId: messageFromDB.senderId,
+                                sentAt: messageFromDB.sentAt
+                            };
+                        }
+                    }
+
                     return {
                         ...convo,
                         serviceName: serviceDetails?.additionalFields?.businessName || '',
                         serviceImage: serviceDetails?.images?.CoverImage?.[0] || null,
                         // vendorPic: convo.vendorId?.profilePic || '',
+                        lastMessage
                     };
 
                 } catch (err) {
@@ -132,7 +163,6 @@ export const getVendorConversations = async (req, res) => {
             .sort({ updatedAt: -1 })
             .lean();
 
-
         const populatedConversations = await Promise.all(
             conversations.map(async (convo) => {
                 const collectionName = convo.serviceCategory; // dynamic collection
@@ -148,12 +178,42 @@ export const getVendorConversations = async (req, res) => {
                         .select('additionalFields.businessName images')
                         .lean();
 
+                    const messageFromDB = await Message.findOne({ conversationId: convo._id })
+                        .sort({ sentAt: -1 })
+                        .select("text iv sentAt")
+                        .lean();
+
+                    let lastMessage = null;
+
+                    if (messageFromDB) {
+                        try {
+                            const decryptedText = decryptMessage(
+                                messageFromDB.text,
+                                messageFromDB.iv
+                            );
+
+                            lastMessage = {
+                                text: decryptedText,
+                                senderId: messageFromDB.senderId,
+                                sentAt: messageFromDB.sentAt
+                            };
+                        } catch (err) {
+                            lastMessage = {
+                                text: "[decryption failed]",
+                                senderId: messageFromDB.senderId,
+                                sentAt: messageFromDB.sentAt
+                            };
+                        }
+                    }
+
                     return {
                         ...convo,
                         serviceName: serviceDetails?.additionalFields?.businessName || '',
                         serviceImage: serviceDetails?.images?.CoverImage?.[0] || null,
-                        // vendorPic: convo.vendorId?.profilePic || '',
+                        lastMessage
                     };
+
+
 
                 } catch (err) {
                     console.warn(`⚠️ Failed to fetch service for category: ${collectionName}`, err.message);
