@@ -24,6 +24,57 @@
 #           pm2 restart backend
 #           pm2 save
 
+# feb 2026 commented
+
+# name: Backend CI/CD
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Deploy Backend
+#         # uses: appleboy/ssh-action@v0.1.7
+#         uses: appleboy/ssh-action@v1.0.3
+#         with:
+#           host: ${{ secrets.VPS_HOST }}
+#           username: ${{ secrets.VPS_USER }}
+#           key: ${{ secrets.VPS_PRIVATE_KEY }}
+#           script: |
+    
+#             cd /var/www/backend
+
+#             # Clone repo if first time
+#             if [ ! -d ".git" ]; then
+#               git clone https://github.com/onivahcom/backend.git .
+#             fi
+
+#             git fetch origin main
+#             git reset --hard origin/main
+
+#             # Install dependencies
+#             npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+#             # Ensure PM2 is installed globally
+#             if ! command -v pm2 &> /dev/null; then
+#               npm install -g pm2
+#             fi
+
+#             # Restart or start backend with PM2
+#             pm2 describe backend > /dev/null 2>&1
+#             if [ $? -eq 0 ]; then
+#               pm2 restart backend
+#             else
+#               pm2 start server.js --name backend
+#             fi
+
+#             pm2 save
+
 
 name: Backend CI/CD
 
@@ -38,37 +89,47 @@ jobs:
 
     steps:
       - name: Deploy Backend
-        uses: appleboy/ssh-action@v0.1.7
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_PRIVATE_KEY }}
+          script_stop: true
           script: |
-    
-            cd /var/www/backend
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            cd /var/www
 
             # Clone repo if first time
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/onivahcom/backend.git .
+            if [ ! -d "backend" ]; then
+              echo "📦 Cloning repository..."
+              git clone https://github.com/onivahcom/backend.git backend
             fi
 
+            cd backend
+
+            echo "🔄 Pulling latest code..."
             git fetch origin main
             git reset --hard origin/main
 
-            # Install dependencies
-            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+            echo "📦 Installing dependencies..."
+            npm ci --production --legacy-peer-deps || npm install --production --legacy-peer-deps
 
-            # Ensure PM2 is installed globally
+            echo "⚙️ Ensuring PM2 is installed..."
             if ! command -v pm2 &> /dev/null; then
               npm install -g pm2
             fi
 
-            # Restart or start backend with PM2
-            pm2 describe gbr-backend > /dev/null 2>&1
-            if [ $? -eq 0 ]; then
+            echo "♻️ Restarting backend..."
+
+            if pm2 list | grep -q "backend"; then
               pm2 restart backend
             else
               pm2 start server.js --name backend
             fi
 
             pm2 save
+
+            echo "✅ Deployment completed successfully!"
